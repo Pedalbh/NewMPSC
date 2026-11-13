@@ -133,6 +133,7 @@ def test_leitura_roda_sem_os_segredos_da_aplicacao(monkeypatch):
     autos.ler(PDF)
     assert "NEWMPSC_SEGREDO" not in chamadas["env"] and chamadas["timeout"] == autos.TEMPO
     assert chamadas["comando"][1] == "-I" and "exigir" not in chamadas["comando"]
+    assert "cwd" not in chamadas   # o filho acha o pacote sem depender da pasta atual nem da instalação
     autos.ler(PDF, exigir_limites=True)
     assert chamadas["comando"][-1] == "exigir"
 
@@ -248,6 +249,16 @@ def test_nome_do_arquivo_e_escapado_e_limpo(com_fila, banco):
     assert banco.scalars(select(ArquivoAutos.nome)).all()[-1] == "laudofdp.exe"   # sem marca que inverte o texto
 
 
+def test_nome_longo_e_guardado_inteiro_e_so_o_aviso_e_encurtado(com_fila, banco):
+    """Defeito achado na revisão: o nome ia cortado para o banco, e volumes do mesmo processo ficavam iguais."""
+    longo = "Autos completos do processo 0000101 - volume 1 de 3 - evento 42 - laudo pericial.pdf"
+    enviar_pdf(com_fila, nome=longo)
+    html = com_fila.get("/processos/1").text
+    assert banco.scalar(select(ArquivoAutos.nome)) == longo
+    assert f'<span class="arquivo-nome">{longo}</span>' in html and f'aria-label="Remover {longo}"' in html
+    assert f"{longo[:57]}…: 3 páginas lidas." in html
+
+
 def test_remover_apaga_o_arquivo_e_as_paginas(com_fila, banco):
     enviar_pdf(com_fila)
     r = com_fila.enviar("/processos/1/autos/1/remover")
@@ -275,6 +286,18 @@ def test_com_as_vagas_ocupadas_o_envio_e_recusado_e_o_servidor_responde(com_fila
     assert com_fila.get("/saude").status_code == 200
     assert "o servidor está lendo outros arquivos; tente de novo em instantes" in com_fila.get("/processos/1").text
     assert contar(banco, ArquivoAutos) == 0
+
+
+def test_servidor_ocupado_interrompe_o_envio_no_primeiro_arquivo(com_fila, vagas_ocupadas, monkeypatch):
+    """Defeito achado na revisão: cada arquivo do envio esperava a vaga de novo e repetia a recusa."""
+    tentativas, original = [], autos.ler
+    monkeypatch.setattr(autos, "ler", lambda dados, **kw: tentativas.append(1) or original(dados, **kw))
+    outro = pdf([f"Processo {NUMERO}\nOutra peça."])
+    com_fila.post("/processos/1/autos", data={"csrf": com_fila.csrf("/")}, follow_redirects=False,
+                  files=[("autos", ("a.pdf", PDF)), ("autos", ("b.pdf", outro))])
+    html = com_fila.get("/processos/1").text
+    assert len(tentativas) == 1 and html.count("o servidor está lendo outros arquivos") == 1
+    assert "Nada foi enviado: o servidor está lendo" in html
 
 
 def test_um_envio_em_leitura_por_usuario(com_fila, ana, banco):

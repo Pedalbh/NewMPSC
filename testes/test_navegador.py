@@ -173,4 +173,10 @@ def test_celular(endereco, pagina):
     assert pg.evaluate("document.querySelector('#autos h2').getBoundingClientRect().top >= "
                        "document.querySelector('.topo').getBoundingClientRect().bottom")
     foto(pg, "10-celular-autos")
+    # largura de tablet: uma coluna só, e a lateral não vira caixa com rolagem própria
+    pg.set_viewport_size({"width": 900, "height": 700})
+    pg.reload()
+    assert pg.evaluate("(() => { const e = getComputedStyle(document.querySelector('.lateral')); "
+                       "return e.position + ' ' + e.overflowY; })()") == "static visible"
+    foto(pg, "11-tablet")
     assert pg.erros == [], pg.erros

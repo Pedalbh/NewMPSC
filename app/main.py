@@ -256,16 +256,16 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
     def _paginas(n: int, lidas: bool = False) -> str:
         return f"1 página{' lida' if lidas else ''}" if n == 1 else f"{n} páginas{' lidas' if lidas else ''}"
 
-    def _ler_e_guardar(db, p, dados: bytes, nome: str, prazo: float) -> tuple[str, bool]:
-        """Um arquivo: confere, lê fora da transação do banco e guarda. Devolve a frase do
-        resultado e se há ressalva."""
+    def _ler_e_guardar(db, p, dados: bytes, nome: str, curto: str, prazo: float) -> tuple[str, bool]:
+        """Um arquivo: confere, lê fora da transação do banco e guarda com o nome inteiro. Devolve a frase do
+        resultado (com o nome curto, porque o aviso viaja no cookie da sessão) e se há ressalva."""
         autos.conferir(dados)
         if servicos.autos_repetidos(p, autos.impressao(dados)):
             raise servicos.AutosRecusados("este arquivo já está nos autos")
         db.commit()   # devolve a conexão do banco enquanto o PDF é lido
         leitura = autos.ler(dados, tempo=prazo - time.monotonic(), exigir_limites=config.producao)
         arquivo = servicos.juntar_autos(db, p, nome, leitura, config.dados_ficticios)
-        frase = f"{arquivo.nome}: {_paginas(arquivo.total_paginas, lidas=True)}"
+        frase = f"{curto}: {_paginas(arquivo.total_paginas, lidas=True)}"
         if arquivo.sem_texto == arquivo.total_paginas:
             frase += ", nenhuma com texto para ler (arquivo digitalizado)"
         elif arquivo.sem_texto:
@@ -288,18 +288,21 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
                 prazo = time.monotonic() + TEMPO_ENVIO
                 for enviado in enviados[:MAX_PDFS_POR_ENVIO]:
                     nome = servicos.nome_de_arquivo(enviado.filename)
-                    curto = nome if len(nome) <= 60 else nome[:57] + "…"   # o aviso viaja no cookie da sessão
+                    curto = nome if len(nome) <= 60 else nome[:57] + "…"
                     dados = await enviado.read(autos.TETO_PDF + 1)
                     await enviado.close()
                     try:
-                        frase, ressalva = await run_in_threadpool(_ler_e_guardar, db, p, dados, curto, prazo)
+                        frase, ressalva = await run_in_threadpool(_ler_e_guardar, db, p, dados, nome, curto, prazo)
+                    except autos.Ocupado:
+                        raise   # não adianta tentar os demais: cada um esperaria a vaga de novo
                     except (autos.PdfRecusado, servicos.AutosRecusados) as e:
                         recusas.append(f"{curto} não entrou: {e}.")
                         continue
                     leituras.append(frase)
                     ressalvas += ressalva
         except autos.Ocupado as e:
-            recusas.append(f"Nada foi enviado: {e}.")
+            parou = "Os demais arquivos não foram lidos" if leituras or recusas else "Nada foi enviado"
+            recusas.append(f"{parou}: {e}.")
         if len(enviados) > MAX_PDFS_POR_ENVIO:
             recusas.append(f"Só os {MAX_PDFS_POR_ENVIO} primeiros arquivos foram lidos; envie os demais em seguida.")
         tipo = "erro" if not leituras else "atencao" if recusas or ressalvas else "ok"

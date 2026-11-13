@@ -1,7 +1,7 @@
 """Leitura dos autos em PDF. O arquivo vem de fora, então é aberto num processo filho, sem os segredos da aplicação
 e com teto de tempo e de memória; só o texto de cada página volta. O arquivo original não é guardado.
 
-Rodado como `python -I -m app.autos MAX_PAGINAS [exigir]`, lê o PDF da entrada padrão e escreve o resultado em JSON."""
+O filho roda `_filho` em modo isolado (`python -I`), lê o PDF da entrada padrão e escreve o resultado em JSON."""
 import hashlib
 import io
 import json
@@ -11,6 +11,7 @@ import sys
 import threading
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 
 TETO_PDF = 50 * 1024 * 1024
 MAX_PAGINAS = 2000
@@ -22,6 +23,9 @@ ESPERA_VAGA = 3                 # segundos; depois disso o servidor diz que est�
 _vagas = threading.BoundedSemaphore(2)   # leituras ao mesmo tempo, somando todos os usuários
 _lendo: set[int] = set()                 # usuários com envio em leitura
 _tranca = threading.Lock()
+# o modo isolado ignora a pasta atual; o filho recebe onde está o pacote, instalado ou não
+_PARTIDA = "import sys; sys.path.insert(0, sys.argv.pop(1)); from app.autos import _filho; _filho(sys.argv[1:])"
+_RAIZ = str(Path(__file__).resolve().parent.parent)
 _CONTROLE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f‪-‮⁦-⁩]")
 
 
@@ -122,7 +126,7 @@ def ler(dados: bytes, tempo: float | None = None, exigir_limites: bool = False) 
     tempo = TEMPO if tempo is None else min(tempo, TEMPO)
     if tempo <= 0:
         raise PdfRecusado("o envio demorou demais. Envie este arquivo de novo, sozinho")
-    comando = [sys.executable, "-I", "-m", "app.autos", str(MAX_PAGINAS)] + (["exigir"] if exigir_limites else [])
+    comando = [sys.executable, "-I", "-c", _PARTIDA, _RAIZ, str(MAX_PAGINAS)] + (["exigir"] if exigir_limites else [])
     if not _vagas.acquire(timeout=ESPERA_VAGA):
         raise Ocupado("o servidor está lendo outros arquivos; tente de novo em instantes")
     try:
@@ -173,6 +177,3 @@ def _filho(argv: list[str]) -> None:
             saida = {"recusa": str(e)}
     sys.stdout.buffer.write(json.dumps(saida, ensure_ascii=False).encode("utf-8"))
 
-
-if __name__ == "__main__":
-    _filho(sys.argv[1:])

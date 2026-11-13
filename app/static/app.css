@@ -71,8 +71,10 @@ main.estreito { max-width: 640px; }
 .grade { display: flex; flex-wrap: wrap; gap: var(--e5); align-items: flex-start; }
 .grade > .principal { flex: 999 1 620px; min-width: 0; }
 .grade > .lateral { flex: 1 1 320px; min-width: 0; }
-.fixo { position: sticky; top: 84px; max-height: calc(100vh - 84px - var(--e4)); overflow-y: auto; }   /* coluna mais alta que a janela rola sozinha */
+/* só com duas colunas a lateral acompanha a rolagem; mais alta que a janela, rola sozinha */
+@media (min-width: 1024px) { .fixo { position: sticky; top: 84px; max-height: calc(100vh - 84px - var(--e4)); overflow-y: auto; } }
 [id] { scroll-margin-top: calc(var(--topo-altura) + var(--e5)); }
+#resultado-autos:focus { outline: none; }   /* recebe o foco para ser lido, mas não é um controle */
 #resultado-autos { scroll-margin-top: calc(var(--topo-altura) + var(--e7) + var(--e6)); }   /* deixa o título do cartão à vista */
 .pilha-cartoes { display: flex; flex-direction: column; gap: var(--e5); }
 .pilha { display: flex; flex-direction: column; gap: var(--e4); }
@@ -143,7 +145,7 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .arquivos li + li { border-top: 1px solid var(--linha); }
 .arquivo-texto { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .arquivo-nome { font-weight: 500; overflow-wrap: anywhere; }
-.arquivo-selos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--e1); }
+.arquivo-selos { display: flex; flex-wrap: wrap; gap: var(--e2); margin-top: var(--e1); }
 .arquivos .btn { min-height: 44px; }
 .agenda { display: flex; flex-direction: column; margin: 0 calc(-1 * var(--e2)); }
 .agenda a { display: flex; align-items: center; gap: var(--e4); padding: var(--e2); border-radius: var(--raio-m); }
@@ -189,7 +191,6 @@ ul.lista { list-style: disc; } ol.lista { list-style: decimal; }
   .proc-texto { flex: 1 1 0; }
   .proc-selos { flex-basis: 100%; justify-content: flex-start; padding-left: calc(4px + var(--e3)); }
   .proc .num { white-space: nowrap; }
-  .fixo { position: static; max-height: none; overflow: visible; }
   :root { --topo-altura: 116px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
