@@ -4,7 +4,7 @@ Aplicação web de trabalho do promotor: os processos recebidos, a minuta de cad
 
 Projeto separado do Gabinete: reaproveita, por cópia, o leitor da planilha do SIG e o gerador de .docx (`app/nucleo/ORIGEM.md`), e não altera aquele repositório.
 
-**Estado (0.1.0):** só dados fictícios. A minuta e a ficha vêm de um motor de demonstração, sem IA. A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
+**Estado (0.2.0):** só dados fictícios. Os autos entram em PDF e são lidos página a página. A minuta e a ficha ainda vêm de um motor de demonstração, sem IA, que não lê os autos. A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
 
 ## Rodar no computador
 

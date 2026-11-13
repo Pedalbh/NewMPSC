@@ -33,6 +33,47 @@
       <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
     </section>
 
+    <section class="cartao" id="autos">
+      <h2>Autos</h2>
+      {% if aviso and aviso.local == 'autos' %}
+      <div class="aviso {{ aviso.tipo }}" id="resultado-autos" role="status" tabindex="-1">
+        {% for t in aviso.textos %}<p>{{ t }}</p>{% endfor %}
+      </div>
+      {% endif %}
+      {% if p.autos %}
+      <ul class="arquivos">
+        {% for a in p.autos %}
+        <li>
+          <div class="arquivo-texto">
+            <span class="arquivo-nome">{{ a.nome }}</span>
+            <span class="fraco pequeno">{{ '1 página' if a.total_paginas == 1 else a.total_paginas ~ ' páginas' }}</span>
+            {% if a.sem_texto or not a.cita_processo %}
+            <span class="arquivo-selos">
+              {% if a.sem_texto %}<span class="selo atencao">{{ a.sem_texto }} sem texto</span>{% endif %}
+              {% if not a.cita_processo %}<span class="selo atencao">Outro processo?</span>{% endif %}
+            </span>
+            {% endif %}
+          </div>
+          <form method="post" action="/processos/{{ p.id }}/autos/{{ a.id }}/remover">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn discreto" type="submit" aria-label="Remover {{ a.nome }}">Remover</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <form method="post" action="/processos/{{ p.id }}/autos" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="soltar" data-enviando="Lendo o arquivo…" data-espera="isso pode levar até um minuto">
+          <input type="file" name="autos" id="autos-pdf" class="oculto-visual" accept="application/pdf,.pdf" multiple>
+          <span class="soltar-titulo" aria-live="polite">Escolha o PDF dos autos</span>
+          <span class="soltar-detalhe fraco pequeno">ou solte o arquivo aqui · até 50 MB</span>
+        </label>
+        <noscript><button class="btn largo" type="submit">Enviar PDF</button></noscript>
+      </form>
+      <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if config.motor == 'demo' %} Por enquanto, a minuta ainda não usa os autos.{% endif %}</p>
+    </section>
+
     <section class="cartao">
       <h2>Processo</h2>
       <dl class="dados">

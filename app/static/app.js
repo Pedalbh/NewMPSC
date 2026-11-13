@@ -1,23 +1,31 @@
-// Casca da página: envio da planilha, edição e salvamento da minuta, cópia do texto. A lógica fica no servidor.
+// Casca da página: envio da planilha e dos autos, edição e salvamento da minuta, cópia do texto. A lógica fica no servidor.
 (() => {
   "use strict";
   const csrf = document.querySelector('meta[name="csrf"]')?.content || "";
 
-  // ---- planilha do SIG: escolher ou soltar envia na hora
-  const soltar = document.getElementById("soltar");
-  const planilha = document.getElementById("planilha");
-  if (soltar && planilha) {
-    const form = planilha.form;
-    planilha.addEventListener("change", () => { if (planilha.files.length) form.submit(); });
+  // ---- planilha do SIG e PDF dos autos: escolher ou soltar o arquivo envia na hora
+  document.querySelectorAll("label.soltar").forEach((soltar) => {
+    const arquivo = soltar.querySelector('input[type="file"]');
+    if (!arquivo) return;
+    const enviar = () => {
+      const titulo = soltar.querySelector(".soltar-titulo");
+      const detalhe = soltar.querySelector(".soltar-detalhe");
+      if (soltar.dataset.enviando && titulo) titulo.textContent = soltar.dataset.enviando;
+      if (soltar.dataset.espera && detalhe) detalhe.textContent = soltar.dataset.espera;
+      soltar.classList.add("enviando");
+      arquivo.form.setAttribute("aria-busy", "true");
+      arquivo.form.submit();
+    };
+    arquivo.addEventListener("change", () => { if (arquivo.files.length) enviar(); });
     ["dragenter", "dragover"].forEach((ev) => soltar.addEventListener(ev, (e) => {
       e.preventDefault(); soltar.classList.add("sobre");
     }));
     ["dragleave", "drop"].forEach((ev) => soltar.addEventListener(ev, () => soltar.classList.remove("sobre")));
     soltar.addEventListener("drop", (e) => {
       e.preventDefault();
-      if (e.dataTransfer?.files.length) { planilha.files = e.dataTransfer.files; form.submit(); }
+      if (e.dataTransfer?.files.length) { arquivo.files = e.dataTransfer.files; enviar(); }
     });
-  }
+  });
 
   // ---- minuta: cada parágrafo é um bloco editável; salva sozinha pouco depois da última tecla
   const folha = document.getElementById("folha");

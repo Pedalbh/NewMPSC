@@ -11,7 +11,7 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from . import servicos
+from . import autos, servicos
 from .config import carregar
 from .modelos import Usuario, criar_banco
 from .portas import ConexaoPlanilha, criar_motor
@@ -19,6 +19,7 @@ from .seguranca import gerar_hash
 
 EMAIL_DEMO = "demonstracao@newmpsc.invalid"
 FILA_FICTICIA = Path(__file__).parent.parent / "dados_ficticios" / "fila-sig-ficticia.csv"
+AUTOS_FICTICIOS = FILA_FICTICIA.with_name("autos-ficticios.pdf")
 
 
 def criar_usuario(db, email: str, nome: str, senha: str, cargo: str = "", promotoria: str = "") -> Usuario:
@@ -32,7 +33,8 @@ def criar_usuario(db, email: str, nome: str, senha: str, cargo: str = "", promot
 
 
 def semente(db, config, senha: str | None = None) -> str:
-    """Cria o usuário de demonstração com a fila e a pauta fictícias. Devolve a senha gerada."""
+    """Cria o usuário de demonstração com a fila, os autos de um processo e a pauta fictícios.
+    Devolve a senha gerada."""
     if not config.dados_ficticios:
         raise SystemExit("a semente só roda em ambiente de dados fictícios")
     senha = senha or secrets.token_urlsafe(12)
@@ -40,6 +42,8 @@ def semente(db, config, senha: str | None = None) -> str:
     usuario = criar_usuario(db, EMAIL_DEMO, "Promotor de Demonstração", senha, "Promotor de Justiça",
                             "1ª Promotoria de Justiça (fictícia)")
     servicos.importar_fila(db, usuario, FILA_FICTICIA.read_bytes(), FILA_FICTICIA.name, ConexaoPlanilha(), motor, True)
+    primeiro = servicos.fila(db, usuario)[0]   # o PDF fictício é deste processo
+    servicos.juntar_autos(db, primeiro, AUTOS_FICTICIOS.name, autos.ler(AUTOS_FICTICIOS.read_bytes()), True)
     base = datetime.now().replace(minute=0, second=0, microsecond=0)
     pauta = (("0000102-00.2026.8.24.0000", 1, 14, "Instrução e julgamento"),
              ("0000105-00.2026.8.24.0000", 1, 16, "Custódia"),

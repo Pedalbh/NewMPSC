@@ -35,7 +35,7 @@
 </header>
 {% endif %}
 <main id="conteudo" class="{% block classe_main %}{% endblock %}">
-{% if aviso %}
+{% if aviso and not aviso.local %}
 <div class="aviso {{ aviso.tipo }}" role="status">
   {% for t in aviso.textos %}<p>{{ t }}</p>{% endfor %}
 </div>
