@@ -1,0 +1,12 @@
+Fila de trabalho (DADOS FICTÍCIOS);;;;;;;;;;
+;;;;;;;;;;
+Sel.;Pendência;Dependentes;Réu preso;Nº Judiciário;Nº SIG;Sistema;Entrada;Classe TJ;Assunto Principal;Vista
+N;N;N;S;0000101-00.2026.8.24.0000;08.2026.00000101-0;EPROC;09/11/2026 10:12:00;Ação Penal - Procedimento Ordinário;Roubo Majorado;Intimação
+N;N;N;N;0000102-00.2026.8.24.0000;08.2026.00000102-0;EPROC;10/11/2026 09:01:00;Ação Penal - Procedimento Ordinário;Furto Qualificado;Intimação
+N;S;S;N;0000103-00.2026.8.24.0000;08.2026.00000103-0;EPROC;11/11/2026 16:40:00;Inquérito Policial;Estelionato;Urgente
+N;N;N;N;0000104-00.2026.8.24.0000;08.2026.00000104-0;EPROC;12/11/2026 08:15:00;Inquérito Policial;Receptação;Intimação
+N;N;N;S;0000105-00.2026.8.24.0000;08.2026.00000105-0;EPROC;12/11/2026 11:30:00;Auto de Prisão em Flagrante;Tráfico de Drogas e Condutas Afins;Urgente
+N;N;N;N;0000106-00.2026.8.24.0000;08.2026.00000106-0;EPROC;06/11/2026 14:22:00;Medidas Protetivas de Urgência;Ameaça;Urgente
+N;N;N;N;0000107-00.2026.8.24.0000;08.2026.00000107-0;EPROC;05/11/2026 13:05:00;Termo Circunstanciado;Lesão Corporal Leve;Intimação
+N;N;N;N;0000108-00.2026.8.24.0000;08.2026.00000108-0;EPROC;13/11/2026 09:48:00;Ação Penal - Procedimento Sumário;Embriaguez ao Volante;Intimação
+N;N;N;N;0000109-00.2026.8.24.0000;08.2026.00000109-0;EPROC;04/11/2026 17:10:00;Execução da Pena;Progressão de Regime;

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titulo %}Entrar · Mesa{% endblock %}
+{% block classe_main %}centro{% endblock %}
+{% block conteudo %}
+<section class="cartao entrar" aria-labelledby="t-entrar">
+  <div class="marca grande"><span class="marca-traco" aria-hidden="true"></span>Mesa</div>
+  <div>
+    <h1 id="t-entrar">Entre para ver a sua mesa</h1>
+    <p class="fraco">Processos recebidos, minutas e audiências num lugar só.</p>
+  </div>
+  {% if erro %}<div class="aviso erro" role="alert"><p>{{ erro }}</p></div>{% endif %}
+  <form method="post" action="/entrar" class="pilha">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label class="campo">E-mail
+      <input type="email" name="email" value="{{ email or '' }}" autocomplete="username" required autofocus>
+    </label>
+    <label class="campo">Senha
+      <input type="password" name="senha" autocomplete="current-password" required>
+    </label>
+    <button class="btn principal largo" type="submit">Entrar</button>
+  </form>
+  <p class="fraco pequeno">O acesso é por convite. Se você ainda não tem conta, fale com o responsável.</p>
+</section>
+{% endblock %}

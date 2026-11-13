@@ -1,0 +1,36 @@
+[project]
+name = "mesa"
+version = "0.1.0"
+description = "Aplicação web de trabalho do promotor: processos, minutas e audiências"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi==0.115.6",
+  "uvicorn[standard]==0.34.0",
+  "jinja2==3.1.5",
+  "sqlalchemy==2.0.36",
+  "argon2-cffi==23.1.0",
+  "itsdangerous==2.2.0",
+  "python-multipart==0.0.20",
+  "xlrd==2.0.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest==8.3.4", "httpx==0.28.1", "ruff==0.8.4", "playwright==1.49.1"]
+
+[tool.pytest.ini_options]
+testpaths = ["testes"]
+markers = ["navegador: abre a aplicação num navegador de verdade"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["app/nucleo/tabela.py"]   # cópia sem alteração do repositório Gabinete
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S"]
+ignore = ["S101"]
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends"]
+
+[tool.ruff.lint.per-file-ignores]
+"testes/*" = ["S105", "S106"]

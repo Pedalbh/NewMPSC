@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf" content="{{ csrf }}">
+<meta name="robots" content="noindex, nofollow">
+<title>{% block titulo %}Mesa{% endblock %}</title>
+<link rel="icon" href="/static/icone.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/static/mesa.css?v={{ versao }}">
+<script src="/static/mesa.js?v={{ versao }}" defer></script>
+</head>
+<body>
+<a class="pular" href="#conteudo">Pular para o conteúdo</a>
+{% if config.dados_ficticios %}<div class="faixa" role="note">Ambiente de teste · só dados fictícios</div>{% endif %}
+{% if usuario is defined %}
+<header class="topo">
+  <div class="topo-dentro">
+    <a class="marca" href="/" aria-label="Mesa, início"><span class="marca-traco" aria-hidden="true"></span>Mesa</a>
+    <nav aria-label="Principal">
+      <a class="aba" href="/" {% if pagina == 'processos' %}aria-current="page"{% endif %}>Processos</a>
+      <a class="aba" href="/audiencias" {% if pagina == 'audiencias' %}aria-current="page"{% endif %}>Audiências</a>
+    </nav>
+    <div class="conta">
+      <a class="conta-nome" href="/configuracoes" {% if pagina == 'configuracoes' %}aria-current="page"{% endif %}>
+        <span class="avatar" aria-hidden="true">{{ usuario.nome[:1] | upper }}</span>
+        <span class="so-largo">{{ usuario.nome }}</span>
+      </a>
+      <form method="post" action="/sair">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn discreto" type="submit">Sair</button>
+      </form>
+    </div>
+  </div>
+</header>
+{% endif %}
+<main id="conteudo" class="{% block classe_main %}{% endblock %}">
+{% if aviso %}
+<div class="aviso {{ aviso.tipo }}" role="status">
+  {% for t in aviso.textos %}<p>{{ t }}</p>{% endfor %}
+</div>
+{% endif %}
+{% block conteudo %}{% endblock %}
+</main>
+{% if usuario is defined %}<footer class="rodape">Mesa {{ versao }} · motor de minutas: {{ config.motor }}</footer>{% endif %}
+</body>
+</html>

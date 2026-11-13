@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block titulo %}Ficha · {{ a.numero }} · Mesa{% endblock %}
+{% block conteudo %}
+<nav class="trilha" aria-label="Você está em"><a class="elo" href="/audiencias">‹ Audiências</a></nav>
+<section class="cabecalho-proc">
+  <div>
+    <p class="rotulo">Ficha de audiência · {{ a.tipo }}</p>
+    <h1 class="num">{{ a.numero }}</h1>
+    <p class="fraco">{{ a.inicio | dia_extenso }}, às {{ a.inicio | hora }}</p>
+  </div>
+  <button class="btn so-tela" type="button" id="imprimir">Imprimir</button>
+</section>
+<div class="grade">
+  <section class="principal pilha-cartoes">
+    <section class="cartao"><h2>Resumo</h2><p>{{ a.ficha.resumo }}</p></section>
+    <section class="cartao"><h2>Pontos do caso</h2><ul class="lista">{% for x in a.ficha.pontos %}<li>{{ x }}</li>{% endfor %}</ul></section>
+    <section class="cartao"><h2>Perguntas sugeridas</h2><ol class="lista">{% for x in a.ficha.perguntas %}<li>{{ x }}</li>{% endfor %}</ol></section>
+  </section>
+  <aside class="lateral pilha-cartoes">
+    <section class="cartao"><h2>Antes do ato</h2><ul class="lista">{% for x in a.ficha.pendencias %}<li>{{ x }}</li>{% endfor %}</ul></section>
+    <section class="cartao so-tela">
+      <p class="fraco pequeno">Ficha feita pelo motor: {{ a.motor }}.</p>
+      <form method="post" action="/audiencias/{{ a.id }}/remover">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn perigo largo" type="submit">Remover da pauta</button>
+      </form>
+    </section>
+  </aside>
+</div>
+{% endblock %}

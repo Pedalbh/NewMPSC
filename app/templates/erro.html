@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block titulo %}Erro · Mesa{% endblock %}
+{% block classe_main %}centro{% endblock %}
+{% block conteudo %}
+<section class="cartao entrar">
+  <p class="rotulo">Erro {{ codigo }}</p>
+  <h1>{{ mensagem }}</h1>
+  <a class="btn principal" href="/">Voltar ao início</a>
+</section>
+{% endblock %}

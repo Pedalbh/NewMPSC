@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block titulo %}{{ p.numero }} · Mesa{% endblock %}
+{% block conteudo %}
+<nav class="trilha" aria-label="Você está em"><a class="elo" href="/">‹ Processos</a></nav>
+<section class="cabecalho-proc">
+  <div>
+    <p class="rotulo">{{ minuta.tipo }}</p>
+    <h1 class="num">{{ p.numero }}</h1>
+    <p class="fraco">{{ p.classe or 'Classe não informada' }}{% if p.assunto %} · {{ p.assunto }}{% endif %}</p>
+  </div>
+  <div class="proc-selos">
+    {% if p.reu_preso %}<span class="selo erro">Réu preso</span>{% endif %}
+    {% if p.vista %}<span class="selo {{ 'atencao' if p.vista | lower == 'urgente' }}">{{ p.vista }}</span>{% endif %}
+    {% if p.situacao == 'concluido' %}<span class="selo ok">Concluído</span>{% endif %}
+  </div>
+</section>
+
+<div class="grade">
+  <section class="principal" aria-label="Minuta">
+    <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" aria-label="Texto da minuta, editável">
+      {% for b in minuta.blocos %}<p class="b b-{{ b.estilo }}" data-estilo="{{ b.estilo }}" contenteditable="true" spellcheck="true">{{ b.texto }}</p>{% endfor %}
+    </div>
+  </section>
+
+  <aside class="lateral pilha-cartoes fixo" aria-label="Ações">
+    <section class="cartao">
+      <div class="linha">
+        <h2>Minuta</h2>
+        <span class="selo empurra" id="estado-salvar" role="status" aria-live="polite">{{ 'Salva às ' ~ (minuta.atualizada_em | hora) if minuta.editada else 'Sem alterações' }}</span>
+      </div>
+      <a class="btn principal largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
+      <button class="btn largo" type="button" id="copiar" data-origem="/processos/{{ p.id }}/minuta.txt">Copiar texto</button>
+      <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
+    </section>
+
+    <section class="cartao">
+      <h2>Processo</h2>
+      <dl class="dados">
+        <div><dt>Entrada</dt><dd>{{ p.entrada | data }} {{ p.entrada | hora }}</dd></div>
+        <div><dt>Nº SIG</dt><dd>{{ p.numero_sig or '—' }}</dd></div>
+        <div><dt>Prioridade</dt><dd>{{ grupos[p.grupo] }}</dd></div>
+        <div><dt>Motor</dt><dd>{{ minuta.motor }}</dd></div>
+      </dl>
+      <form method="post" action="/processos/{{ p.id }}/situacao">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        {% if p.situacao == 'a_fazer' %}
+        <input type="hidden" name="situacao" value="concluido">
+        <button class="btn largo" type="submit">Marcar como concluído</button>
+        {% else %}
+        <input type="hidden" name="situacao" value="a_fazer">
+        <button class="btn largo" type="submit">Devolver à fila</button>
+        {% endif %}
+      </form>
+      <details>
+        <summary>Refazer a minuta do zero</summary>
+        <form method="post" action="/processos/{{ p.id }}/refazer" class="pilha">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <p class="fraco pequeno">O texto atual, com as suas alterações, é substituído.</p>
+          <button class="btn perigo" type="submit">Refazer</button>
+        </form>
+      </details>
+    </section>
+  </aside>
+</div>
+{% endblock %}
