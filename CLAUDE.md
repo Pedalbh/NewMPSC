@@ -33,3 +33,18 @@ Nível da tarefa, definido no início:
 - **Grande ou sensível** (arquitetura, IA, dado, hospedagem): plano curto escrito no PR antes do código, depois os três revisores.
 
 Os pareceres vão como comentário no PR. Defeito apontado é corrigido pela sessão principal e volta ao mesmo revisor. Agente novo só entra se um defeito real mostrar que falta um papel.
+
+## Central de cartões (`docs/CARTOES.md`)
+Só a decisão complexa ou sensível sobe para o titular, como cartão. O resto o coordenador decide e segue.
+
+**Vira cartão:**
+- dado e LGPD: dado real, destino novo de dado, prazo de guarda, exclusão;
+- contrato e dinheiro: serviço pago, hospedagem, fornecedor;
+- conteúdo jurídico: o que a IA pode afirmar, qual fonte vale como oficial, texto de peça;
+- regras do projeto: este arquivo, os limites, a equipe de agentes;
+- rumo do produto: ordem das etapas, função inteira que entra ou sai;
+- impasse: revisor reprova e o coordenador discorda, ou dois revisores pedem coisas opostas.
+
+**O coordenador decide e registra no PR** (seção "Decisões do coordenador"): desenho técnico, bibliotecas, limites numéricos provisórios, textos de tela, correções pedidas pelos revisores, atualização de dependência, e o merge quando os revisores aprovam e o CI está verde.
+
+Cada cartão traz: a pergunta numa frase, por que é do titular, as opções com o efeito de cada uma, a recomendação, e o que fica parado enquanto não há resposta. O coordenador não espera pelo cartão: segue no que não depende dele. Na dúvida sobre de que lado da régua algo cai, vira cartão.
