@@ -51,5 +51,5 @@ Página digitalizada não tem texto: é contada e avisada. A leitura dessas pág
 4. Segundo fator no login; troca de senha pela pessoa.
 5. Pauta lida do eproc ou do 365, em vez de digitada.
 6. Autos: prazo de guarda do texto e exclusão de processo e de usuário; decidir se a impressão digital (`sha256`) do arquivo continua guardada; rever cota e limites com autos reais.
-7. Hospedagem: proxy com prazo para o corpo da requisição; disco e pasta temporária cifrados (o envio passa pelo disco antes da leitura); com Postgres, rotina de limpeza no lugar do `secure_delete`.
+7. Hospedagem: um processo de servidor só, ou vagas de leitura em armazenamento compartilhado (hoje valem por processo); pasta da aplicação só de leitura; proxy com prazo para o corpo da requisição; disco e pasta temporária cifrados (o envio passa pelo disco antes da leitura); com Postgres, rotina de limpeza no lugar do `secure_delete`.
 8. Conferência de dependências no CI (`pip-audit` ou Dependabot) e versões fixadas por hash.

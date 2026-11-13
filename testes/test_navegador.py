@@ -176,7 +176,10 @@ def test_celular(endereco, pagina):
     # largura de tablet: uma coluna só, e a lateral não vira caixa com rolagem própria
     pg.set_viewport_size({"width": 900, "height": 700})
     pg.reload()
-    assert pg.evaluate("(() => { const e = getComputedStyle(document.querySelector('.lateral')); "
-                       "return e.position + ' ' + e.overflowY; })()") == "static visible"
+    estilo = ("(() => { const e = getComputedStyle(document.querySelector('.lateral')); "
+              "return e.position + ' ' + e.overflowY; })()")
+    assert pg.evaluate(estilo) == "static visible"
     foto(pg, "11-tablet")
+    pg.set_viewport_size({"width": 1030, "height": 700})   # janela em que a barra de rolagem tiraria a 2ª coluna
+    assert pg.evaluate(estilo) == "static visible"
     assert pg.erros == [], pg.erros

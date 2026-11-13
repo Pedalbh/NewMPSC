@@ -23,10 +23,12 @@ ESPERA_VAGA = 3                 # segundos; depois disso o servidor diz que est�
 _vagas = threading.BoundedSemaphore(2)   # leituras ao mesmo tempo, somando todos os usuários
 _lendo: set[int] = set()                 # usuários com envio em leitura
 _tranca = threading.Lock()
-# o modo isolado ignora a pasta atual; o filho recebe onde está o pacote, instalado ou não
-_PARTIDA = "import sys; sys.path.insert(0, sys.argv.pop(1)); from app.autos import _filho; _filho(sys.argv[1:])"
+# O modo isolado ignora a pasta atual; o filho recebe onde está o pacote, instalado ou não. A pasta vai para o
+# fim do caminho de importação, para que nada nela tome o lugar de um módulo da biblioteca padrão.
+_ACHAR = "import sys; sys.path.append(sys.argv.pop(1)); from app.autos import _filho"
+_PARTIDA = _ACHAR + "; _filho(sys.argv[1:])"
 _RAIZ = str(Path(__file__).resolve().parent.parent)
-_CONTROLE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f‪-‮⁦-⁩]")
+_CONTROLE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f​-‏‪-‮⁠-⁩﻿]")   # controles e invisíveis
 
 
 class PdfRecusado(Exception):

@@ -113,7 +113,7 @@ def test_recusa_arquivo_pequeno_que_vira_texto_demais():
 
 def test_texto_que_o_banco_nao_grava_e_limpo():
     """Defeito achado na revisão: caractere inválido vindo do PDF derrubava o envio com erro 500."""
-    assert autos.limpar("a\ud800b\x00c‮d ") == "abcd"
+    assert autos.limpar("a\ud800b\x00c\u202ed\u200b\ufeff ") == "abcd"
     leitura = autos.ler(pdf([f"AAA {NUMERO}"], a_vira="D800"))
     assert leitura.paginas == [NUMERO]
     leitura.paginas[0].encode("utf-8")
@@ -133,9 +133,19 @@ def test_leitura_roda_sem_os_segredos_da_aplicacao(monkeypatch):
     autos.ler(PDF)
     assert "NEWMPSC_SEGREDO" not in chamadas["env"] and chamadas["timeout"] == autos.TEMPO
     assert chamadas["comando"][1] == "-I" and "exigir" not in chamadas["comando"]
-    assert "cwd" not in chamadas   # o filho acha o pacote sem depender da pasta atual nem da instalação
     autos.ler(PDF, exigir_limites=True)
     assert chamadas["comando"][-1] == "exigir"
+
+
+def test_filho_acha_o_pacote_sem_instalacao_e_fora_da_pasta_do_projeto(tmp_path):
+    """Defeito achado na revisão: sem a aplicação instalada, todo PDF era recusado como danificado.
+    `-S` desliga os pacotes instalados: o pacote só pode ser achado pela pasta passada ao filho."""
+    def partir(raiz):
+        comando = [sys.executable, "-I", "-S", "-c", autos._ACHAR, str(raiz)]
+        return subprocess.run(comando, capture_output=True, cwd=tmp_path, env={}).returncode
+
+    assert autos._PARTIDA.startswith(autos._ACHAR)
+    assert partir(autos._RAIZ) == 0 and partir(tmp_path) != 0
 
 
 def test_tetos_de_memoria_e_processador_valem_no_filho():
@@ -245,7 +255,7 @@ def test_nome_do_arquivo_e_escapado_e_limpo(com_fila, banco):
     enviar_pdf(com_fila, nome="<script>alert(1)</script>.pdf")
     html = com_fila.get("/processos/1").text
     assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html
-    enviar_pdf(com_fila, pdf([f"Processo {NUMERO}\nPeça dois."]), "laudo‮fdp.exe")
+    enviar_pdf(com_fila, pdf([f"Processo {NUMERO}\nPeça dois."]), "laudo\u202efdp.exe")
     assert banco.scalars(select(ArquivoAutos.nome)).all()[-1] == "laudofdp.exe"   # sem marca que inverte o texto
 
 
