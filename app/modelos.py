@@ -11,6 +11,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     create_engine,
+    event,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -76,7 +77,9 @@ class ArquivoAutos(Base):
     tamanho: Mapped[int] = mapped_column(Integer)
     sha256: Mapped[str] = mapped_column(String(64))
     total_paginas: Mapped[int] = mapped_column(Integer)
-    sem_texto: Mapped[int] = mapped_column(Integer, default=0)   # páginas digitalizadas, sem texto para ler
+    sem_texto: Mapped[int] = mapped_column(Integer, default=0)   # páginas digitalizadas ou ilegíveis
+    caracteres: Mapped[int] = mapped_column(Integer, default=0)  # texto guardado, para a cota do usuário
+    cita_processo: Mapped[bool] = mapped_column(Boolean, default=True)   # o número do processo aparece no texto
     enviado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     processo: Mapped[Processo] = relationship(back_populates="autos")
     paginas: Mapped[list["PaginaAutos"]] = relationship(back_populates="arquivo", cascade="all, delete-orphan",
@@ -113,5 +116,9 @@ def criar_banco(url: str):
         if ":memory:" in url:
             opcoes["poolclass"] = StaticPool
     motor = create_engine(url, **opcoes)
+    if url.startswith("sqlite"):
+        @event.listens_for(motor, "connect")
+        def _apagar_de_verdade(conexao, _registro):
+            conexao.execute("PRAGMA secure_delete=ON")   # texto removido não fica nas páginas livres do arquivo
     Base.metadata.create_all(motor)
     return motor, sessionmaker(bind=motor, expire_on_commit=False)

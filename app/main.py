@@ -1,4 +1,5 @@
 """Montagem da aplicação: sessão, cabeçalhos de segurança, rotas e telas."""
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -22,7 +23,8 @@ AQUI = Path(__file__).parent
 TETO_PLANILHA = 20 * 1024 * 1024
 TETO_CORPO = autos.TETO_PDF + 10 * 1024 * 1024   # maior requisição aceita de quem entrou
 TETO_CORPO_ANONIMO = 64 * 1024                    # quem não entrou só envia o formulário de login
-MAX_PDFS_POR_ENVIO = 10
+MAX_PDFS_POR_ENVIO = 5
+TEMPO_ENVIO = 120   # segundos de leitura somados num envio
 DIAS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
 MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
          "novembro", "dezembro")
@@ -112,8 +114,10 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
         ctx.update(csrf=token_csrf(request.session), aviso=request.session.pop("aviso", None))
         return telas.TemplateResponse(request, nome, ctx, status_code=status)
 
-    def avisar(request: Request, tipo: str, textos: str | list[str]) -> None:
-        request.session["aviso"] = {"tipo": tipo, "textos": [textos] if isinstance(textos, str) else textos[:8]}
+    def avisar(request: Request, tipo: str, textos: str | list[str], local: str = "") -> None:
+        """`local` põe o aviso dentro de um cartão da tela, em vez do topo."""
+        request.session["aviso"] = {"tipo": tipo, "local": local,
+                                    "textos": [textos] if isinstance(textos, str) else textos[:8]}
 
     def voltar(caminho: str) -> RedirectResponse:
         return RedirectResponse(caminho, status_code=303)
@@ -249,39 +253,65 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
     def processo(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual)):
         return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta)
 
+    def _paginas(n: int, lidas: bool = False) -> str:
+        return f"1 página{' lida' if lidas else ''}" if n == 1 else f"{n} páginas{' lidas' if lidas else ''}"
+
+    def _ler_e_guardar(db, p, dados: bytes, nome: str, prazo: float) -> tuple[str, bool]:
+        """Um arquivo: confere, lê fora da transação do banco e guarda. Devolve a frase do
+        resultado e se há ressalva."""
+        autos.conferir(dados)
+        if servicos.autos_repetidos(p, autos.impressao(dados)):
+            raise servicos.AutosRecusados("este arquivo já está nos autos")
+        db.commit()   # devolve a conexão do banco enquanto o PDF é lido
+        leitura = autos.ler(dados, tempo=prazo - time.monotonic(), exigir_limites=config.producao)
+        arquivo = servicos.juntar_autos(db, p, nome, leitura, config.dados_ficticios)
+        frase = f"{arquivo.nome}: {_paginas(arquivo.total_paginas, lidas=True)}"
+        if arquivo.sem_texto == arquivo.total_paginas:
+            frase += ", nenhuma com texto para ler (arquivo digitalizado)"
+        elif arquivo.sem_texto:
+            frase += f", {arquivo.sem_texto} sem texto para ler (digitalizadas ou ilegíveis)"
+        if not arquivo.cita_processo:
+            frase += "; o número deste processo não aparece no texto, confira se é o arquivo certo"
+        return frase + ".", bool(arquivo.sem_texto) or not arquivo.cita_processo
+
     @app.post("/processos/{processo_id}/autos", dependencies=[Depends(exigir_csrf)])
     async def juntar_autos(request: Request, p=Depends(meu_processo), db=Depends(banco)):
-        destino = f"/processos/{p.id}#autos"
+        destino = f"/processos/{p.id}#resultado-autos"   # o navegador rola até o resultado e põe o foco nele
         enviados = [a for a in (await request.form()).getlist("autos") if not isinstance(a, str) and a.filename]
         if not enviados:
-            avisar(request, "erro", "Escolha o PDF dos autos.")
+            avisar(request, "erro", "Escolha o PDF dos autos.", "autos")
             return voltar(destino)
         p = db.merge(p)
-        lidos, textos = 0, []
-        for arquivo in enviados[:MAX_PDFS_POR_ENVIO]:
-            nome = arquivo.filename[:200]
-            curto = nome if len(nome) <= 60 else nome[:57] + "…"   # o aviso viaja no cookie da sessão
-            try:
-                leitura = await run_in_threadpool(autos.ler, await arquivo.read(autos.TETO_PDF + 1))
-                avisos = servicos.juntar_autos(db, p, nome, leitura, config.dados_ficticios)
-            except (autos.PdfRecusado, servicos.AutosRecusados) as e:
-                textos.append(f"{curto} não entrou: {e}.")
-                continue
-            lidos += 1
-            textos.append(f"{curto}: {len(leitura.paginas)} página(s) lida(s).")
-            textos += [f"{curto}: {a}." for a in avisos]
+        recusas, leituras, ressalvas = [], [], 0
+        try:
+            with autos.vez_do_usuario(p.usuario_id):
+                prazo = time.monotonic() + TEMPO_ENVIO
+                for enviado in enviados[:MAX_PDFS_POR_ENVIO]:
+                    nome = servicos.nome_de_arquivo(enviado.filename)
+                    curto = nome if len(nome) <= 60 else nome[:57] + "…"   # o aviso viaja no cookie da sessão
+                    dados = await enviado.read(autos.TETO_PDF + 1)
+                    await enviado.close()
+                    try:
+                        frase, ressalva = await run_in_threadpool(_ler_e_guardar, db, p, dados, curto, prazo)
+                    except (autos.PdfRecusado, servicos.AutosRecusados) as e:
+                        recusas.append(f"{curto} não entrou: {e}.")
+                        continue
+                    leituras.append(frase)
+                    ressalvas += ressalva
+        except autos.Ocupado as e:
+            recusas.append(f"Nada foi enviado: {e}.")
         if len(enviados) > MAX_PDFS_POR_ENVIO:
-            textos.append(f"Só os {MAX_PDFS_POR_ENVIO} primeiros arquivos foram lidos; envie os demais em seguida.")
-        so_leituras = lidos == len(enviados) and len(textos) == lidos
-        avisar(request, "ok" if so_leituras else "atencao" if lidos else "erro", textos)
+            recusas.append(f"Só os {MAX_PDFS_POR_ENVIO} primeiros arquivos foram lidos; envie os demais em seguida.")
+        tipo = "erro" if not leituras else "atencao" if recusas or ressalvas else "ok"
+        avisar(request, tipo, recusas + leituras, "autos")   # recusas primeiro: são as que pedem ação
         return voltar(destino)
 
     @app.post("/processos/{processo_id}/autos/{arquivo_id}/remover", dependencies=[Depends(exigir_csrf)])
     def remover_autos(request: Request, arquivo_id: int, p=Depends(meu_processo), db=Depends(banco)):
         if not servicos.remover_autos(db, db.merge(p), arquivo_id):
             raise HTTPException(404, "Arquivo não encontrado.")
-        avisar(request, "ok", "Arquivo removido dos autos.")
-        return voltar(f"/processos/{p.id}#autos")
+        avisar(request, "ok", "Arquivo removido dos autos.", "autos")
+        return voltar(f"/processos/{p.id}#resultado-autos")
 
     @app.post("/processos/{processo_id}/situacao", dependencies=[Depends(exigir_csrf)])
     async def situacao(request: Request, p=Depends(meu_processo), db=Depends(banco)):

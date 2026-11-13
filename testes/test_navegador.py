@@ -119,12 +119,20 @@ def test_jornada_completa(endereco, pagina):
 
     # autos: escolher o PDF já envia; a tela mostra o que foi lido e deixa remover
     pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
-    pg.get_by_text("autos-ficticios.pdf: 3 página(s) lida(s).").wait_for()
+    # o resultado e o título do cartão ficam à vista, abaixo do cabeçalho fixo
+    resultado = pg.get_by_text("autos-ficticios.pdf: 3 páginas lidas.")
+    sync_api.expect(resultado).to_be_in_viewport()
+    sync_api.expect(pg.locator("#resultado-autos")).to_be_focused()   # leitor de tela anuncia o resultado
+    assert pg.evaluate("document.querySelector('#autos h2').getBoundingClientRect().top >= "
+                       "document.querySelector('.topo').getBoundingClientRect().bottom")
     assert pg.locator(".arquivos li").count() == 1
     foto(pg, "5b-autos")
     pg.get_by_role("button", name="Remover autos-ficticios.pdf").click()
-    pg.get_by_text("Arquivo removido dos autos.").wait_for()
+    sync_api.expect(pg.get_by_text("Arquivo removido dos autos.")).to_be_in_viewport()
     assert pg.locator(".arquivos li").count() == 0
+    # a coluna lateral cabe na janela: o botão de concluir é alcançável com a minuta rolada
+    pg.get_by_role("button", name="Marcar como concluído").focus()
+    sync_api.expect(pg.get_by_role("button", name="Marcar como concluído")).to_be_in_viewport()
     pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
     pg.locator(".arquivos li").wait_for()
 
@@ -159,3 +167,10 @@ def test_celular(endereco, pagina):
     pg.locator("#folha").wait_for()
     assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
     foto(pg, "9-celular-minuta")
+    # no celular o cabeçalho fixo é mais alto: o resultado do envio continua à vista
+    pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
+    sync_api.expect(pg.get_by_text("autos-ficticios.pdf: 3 páginas lidas")).to_be_in_viewport()
+    assert pg.evaluate("document.querySelector('#autos h2').getBoundingClientRect().top >= "
+                       "document.querySelector('.topo').getBoundingClientRect().bottom")
+    foto(pg, "10-celular-autos")
+    assert pg.erros == [], pg.erros

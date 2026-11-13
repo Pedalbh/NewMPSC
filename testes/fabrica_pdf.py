@@ -19,17 +19,28 @@ def _conteudo(texto: str) -> bytes:
     return "\n".join(linhas).encode("cp1252")
 
 
-def pdf(paginas: list[str]) -> bytes:
-    """Um PDF válido com uma página por item. Texto vazio vira página sem texto, como a de um documento digitalizado."""
+def _fluxo(dados: bytes) -> bytes:
+    return f"<< /Length {len(dados)} >>\nstream\n".encode() + dados + b"\nendstream"
+
+
+def pdf(paginas: list[str], repetir: int = 1, a_vira: str = "") -> bytes:
+    """Um PDF válido com uma página por item. Texto vazio vira página sem texto, como a de um documento digitalizado.
+    `repetir` multiplica as páginas sem aumentar o arquivo (todas apontam para o mesmo conteúdo).
+    `a_vira` (quatro dígitos hexadecimais) faz a letra A ser lida como esse código, por um mapa ToUnicode."""
     n = len(paginas)
+    filhas = " ".join(f"{4 + 2 * i} 0 R" for i in range(n) for _ in range(repetir))
+    mapa = f" /ToUnicode {4 + 2 * n} 0 R" if a_vira else ""
     objetos = [b"<< /Type /Catalog /Pages 2 0 R >>",
-               f"<< /Type /Pages /Count {n} /Kids [{' '.join(f'{4 + 2 * i} 0 R' for i in range(n))}] >>".encode(),
-               b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"]
+               f"<< /Type /Pages /Count {n * repetir} /Kids [{filhas}] >>".encode(),
+               f"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding{mapa} >>".encode()]
     for i, texto in enumerate(paginas):
-        fluxo = _conteudo(texto) if texto else b""
         objetos.append(f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents {5 + 2 * i} 0 R "
                        f"/Resources << /Font << /F1 3 0 R >> >> >>".encode())
-        objetos.append(f"<< /Length {len(fluxo)} >>\nstream\n".encode() + fluxo + b"\nendstream")
+        objetos.append(_fluxo(_conteudo(texto) if texto else b""))
+    if a_vira:
+        objetos.append(_fluxo(f"/CIDInit /ProcSet findresource begin 12 dict begin begincmap /CMapName /F def "
+                              f"/CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange "
+                              f"1 beginbfchar <41> <{a_vira}> endbfchar endcmap end end".encode()))
     saida, posicoes = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n"), []
     for numero, corpo in enumerate(objetos, start=1):
         posicoes.append(len(saida))

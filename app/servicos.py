@@ -3,10 +3,11 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .autos import Leitura
+from .autos import Leitura, limpar
 from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, Processo, Usuario
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
@@ -16,6 +17,10 @@ CNJ = re.compile(r"(?<!\d)\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}(?!\d)")
 GRUPOS = ("Réu preso", "Vista urgente", "Intimação", "Outros")
 MAX_COLAGEM = 200
 MAX_ARQUIVOS_AUTOS = 30   # por processo
+COTA_TEXTO_AUTOS = 200_000_000   # caracteres de autos guardados por usuário
+# o número como sai de um PDF: com ou sem máscara, com espaços ou quebra de linha no meio
+_CNJ_SOLTO = re.compile(r"(?<!\d)(\d{7})[\s.\-/]{0,3}(\d{2})[\s.\-/]{0,3}(\d{4})[\s.\-/]{0,3}(\d)[\s.\-/]{0,3}(\d{2})"
+                        r"[\s.\-/]{0,3}(\d{4})(?!\d)")
 TIPOS_AUDIENCIA = ("Instrução e julgamento", "Custódia", "Preliminar", "Justificação", "Plenário do júri", "Outra")
 
 
@@ -127,30 +132,51 @@ class AutosRecusados(ValueError):
     """A mensagem é a orientação mostrada ao usuário."""
 
 
-def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, ficticio: bool) -> list[str]:
+def numeros_no_texto(texto: str) -> set[str]:
+    """Números de processo achados no texto, postos na máscara do CNJ."""
+    return {"{}-{}.{}.{}.{}.{}".format(*m.groups()) for m in _CNJ_SOLTO.finditer(texto or "")}
+
+
+def nome_de_arquivo(nome: str | None) -> str:
+    return limpar(nome or "")[:200] or "autos.pdf"
+
+
+def autos_repetidos(processo: Processo, sha256: str) -> bool:
+    return any(a.sha256 == sha256 for a in processo.autos)
+
+
+def texto_guardado(db: Session, usuario_id: int) -> int:
+    soma = (select(func.coalesce(func.sum(ArquivoAutos.caracteres), 0)).join(Processo)
+            .where(Processo.usuario_id == usuario_id))
+    return db.scalar(soma)
+
+
+def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, ficticio: bool) -> ArquivoAutos:
     """Guarda o texto de um PDF dos autos, página a página, no processo (que já é do usuário).
-    Devolve os avisos para a pessoa conferir. Levanta `AutosRecusados` com a orientação."""
-    if any(a.sha256 == leitura.sha256 for a in processo.autos):
+    Levanta `AutosRecusados` com a orientação."""
+    nome = nome_de_arquivo(nome)
+    if autos_repetidos(processo, leitura.sha256):
         raise AutosRecusados("este arquivo já está nos autos")
     if len(processo.autos) >= MAX_ARQUIVOS_AUTOS:
         raise AutosRecusados(f"o processo já tem {MAX_ARQUIVOS_AUTOS} arquivos; remova algum antes")
-    numeros = {n for texto in leitura.paginas for n in CNJ.findall(texto)}
-    # limite 1 do projeto: enquanto o servidor for só de dados fictícios, número com dígito verificador válido não entra
-    if ficticio and any(dv_ok(n) for n in numeros):
+    if texto_guardado(db, processo.usuario_id) + leitura.caracteres > COTA_TEXTO_AUTOS:
+        raise AutosRecusados("você chegou ao limite de texto guardado; remova autos de processos já concluídos")
+    numeros = numeros_no_texto("\n".join(leitura.paginas))
+    # Limite 1 do projeto. É um alerta, não uma garantia: não enxerga página digitalizada, nome nem CPF.
+    if ficticio and any(dv_ok(n) for n in numeros | numeros_no_texto(nome)):
         raise AutosRecusados("este servidor só aceita dados fictícios, e o arquivo traz número de processo real")
-    arquivo = ArquivoAutos(nome=nome.strip()[:200] or "autos.pdf", tamanho=leitura.tamanho, sha256=leitura.sha256,
+    arquivo = ArquivoAutos(nome=nome, tamanho=leitura.tamanho, sha256=leitura.sha256,
                            total_paginas=len(leitura.paginas), sem_texto=leitura.sem_texto,
+                           caracteres=leitura.caracteres,
+                           cita_processo=processo.numero in numeros or leitura.sem_texto == len(leitura.paginas),
                            paginas=[PaginaAutos(numero=i, texto=t) for i, t in enumerate(leitura.paginas, start=1)])
     processo.autos.append(arquivo)
-    db.commit()
-    avisos = []
-    if leitura.sem_texto == len(leitura.paginas):
-        avisos.append("nenhuma página tem texto para ler (arquivo digitalizado)")
-    elif leitura.sem_texto:
-        avisos.append(f"{leitura.sem_texto} página(s) sem texto para ler (digitalizadas)")
-    if leitura.sem_texto < len(leitura.paginas) and processo.numero not in numeros:
-        avisos.append("o número deste processo não aparece no texto; confira se é o arquivo certo")
-    return avisos
+    try:
+        db.commit()
+    except IntegrityError:   # o mesmo arquivo chegou duas vezes ao mesmo tempo
+        db.rollback()
+        raise AutosRecusados("este arquivo já está nos autos") from None
+    return arquivo
 
 
 def remover_autos(db: Session, processo: Processo, arquivo_id: int) -> bool:

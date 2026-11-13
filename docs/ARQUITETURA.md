@@ -26,11 +26,14 @@ navegador ── HTTPS ── servidor (FastAPI)
 - CSP sem `unsafe-inline`; `X-Frame-Options: DENY`; `no-store` nas páginas; HSTS em produção.
 - Entrada validada no servidor (tetos de tamanho, estilos em lista fechada); saída escapada pelo Jinja.
 - Isolamento por usuário em toda consulta, com teste.
-- PDF dos autos: conferido pelo conteúdo, até 50 MB e 2.000 páginas; aberto num processo filho sem o ambiente da aplicação (nenhum segredo), com teto de tempo e de memória e duas leituras por vez. Nada do arquivo é executado nem servido de volta.
+- PDF dos autos: conferido pelo conteúdo; aberto num processo filho em modo isolado, sem o ambiente da aplicação (nenhum segredo), com teto de tempo (60 s), de memória (1 GB) e de processador. Em produção, se o sistema não aplicar os tetos, o PDF não é lido. Nada do arquivo é executado nem servido de volta.
+- Limites do envio: 50 MB, 2.000 páginas e 8 milhões de caracteres por arquivo; 5 arquivos e 120 s de leitura por envio; 30 arquivos por processo; 200 milhões de caracteres por usuário.
+- O servidor não enfileira leitura: duas ao mesmo tempo no total, uma por usuário; sem vaga, a pessoa é avisada na hora. A conexão do banco é devolvida enquanto o PDF é lido.
+- Número de processo com dígito verificador válido (no texto ou no nome do arquivo) barra o envio em servidor de dados fictícios. É um alerta contra engano, não uma garantia: página digitalizada, nome e CPF não são vistos. A regra de só usar dados fictícios continua sendo de quem usa.
 - Toda requisição tem teto de tamanho, conferido antes de ler o corpo: 60 MB para quem entrou, 64 KB para quem não entrou.
 
 ## Autos
-O usuário envia o PDF na tela do processo. Fica guardado o texto de cada página (`arquivos_autos`, `paginas_autos`), com o número da página, para o motor citar de onde tirou cada afirmação. O arquivo original é descartado depois da leitura. Remover o arquivo apaga o texto.
+O usuário envia o PDF na tela do processo. Fica guardado o texto de cada página (`arquivos_autos`, `paginas_autos`), com o número da página, para o motor citar de onde tirou cada afirmação. O arquivo original é descartado depois da leitura. Remover o arquivo apaga o texto, inclusive das páginas livres do banco (SQLite, `secure_delete`).
 
 Página digitalizada não tem texto: é contada e avisada. A leitura dessas páginas (OCR ou leitura de imagem pelo motor) é assunto da etapa do motor, e é lá que se decide se o original precisa ser guardado.
 
@@ -47,3 +50,6 @@ Página digitalizada não tem texto: é contada e avisada. A leitura dessas pág
 3. Migrações de banco (Alembic) e Postgres; limite de tentativas em armazenamento compartilhado.
 4. Segundo fator no login; troca de senha pela pessoa.
 5. Pauta lida do eproc ou do 365, em vez de digitada.
+6. Autos: prazo de guarda do texto e exclusão de processo e de usuário; decidir se a impressão digital (`sha256`) do arquivo continua guardada; rever cota e limites com autos reais.
+7. Hospedagem: proxy com prazo para o corpo da requisição; disco e pasta temporária cifrados (o envio passa pelo disco antes da leitura); com Postgres, rotina de limpeza no lugar do `secure_delete`.
+8. Conferência de dependências no CI (`pip-audit` ou Dependabot) e versões fixadas por hash.

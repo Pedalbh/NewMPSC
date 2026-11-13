@@ -4,15 +4,17 @@ version = "0.2.0"
 description = "Aplicação web de trabalho do promotor: processos, minutas e audiências"
 requires-python = ">=3.12"
 dependencies = [
-  "fastapi==0.115.6",
+  "fastapi==0.162.6",
+  "starlette==1.10.0",
   "uvicorn[standard]==0.34.0",
-  "jinja2==3.1.5",
+  "jinja2==3.1.6",
   "sqlalchemy==2.0.36",
   "argon2-cffi==23.1.0",
   "itsdangerous==2.2.0",
-  "python-multipart==0.0.20",
+  "python-multipart==0.0.33",
   "xlrd==2.0.2",
   "pypdf==7.1.0",
+  "cryptography==50.0.2",   # o pypdf precisa dela para abrir PDF com restrição de impressão (AES)
 ]
 
 [project.optional-dependencies]
@@ -34,7 +36,7 @@ ignore = ["S101"]
 extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
-"testes/*" = ["S105", "S106"]
+"testes/*" = ["S105", "S106", "S404", "S603"]
 
 [build-system]
 requires = ["setuptools>=75"]

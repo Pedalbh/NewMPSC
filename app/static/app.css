@@ -16,6 +16,7 @@
   --sombra: 0 1px 2px rgb(20 19 18 / .04), 0 8px 24px rgb(20 19 18 / .06);
   --fonte: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --rapido: 120ms;
+  --topo-altura: 64px;   /* cabeçalho fixo: quanto afastar o que é rolado até a vista */
 }
 @media (prefers-color-scheme: dark) { :root {
   --fundo: #0D0C0B; --superficie: #181716; --relevo: #242220; --linha: #302E2B; --linha-forte: #8D8983;
@@ -70,7 +71,9 @@ main.estreito { max-width: 640px; }
 .grade { display: flex; flex-wrap: wrap; gap: var(--e5); align-items: flex-start; }
 .grade > .principal { flex: 999 1 620px; min-width: 0; }
 .grade > .lateral { flex: 1 1 320px; min-width: 0; }
-.fixo { position: sticky; top: 84px; }
+.fixo { position: sticky; top: 84px; max-height: calc(100vh - 84px - var(--e4)); overflow-y: auto; }   /* coluna mais alta que a janela rola sozinha */
+[id] { scroll-margin-top: calc(var(--topo-altura) + var(--e5)); }
+#resultado-autos { scroll-margin-top: calc(var(--topo-altura) + var(--e7) + var(--e6)); }   /* deixa o título do cartão à vista */
 .pilha-cartoes { display: flex; flex-direction: column; gap: var(--e5); }
 .pilha { display: flex; flex-direction: column; gap: var(--e4); }
 .linha { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e3); }
@@ -133,12 +136,15 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .soltar { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: var(--e5) var(--e4); border: 1.5px dashed var(--linha-forte); border-radius: var(--raio-m); cursor: pointer; transition: background var(--rapido), border-color var(--rapido); }
 .soltar:hover, .soltar.sobre, .soltar:focus-within { background: var(--relevo); border-color: var(--primaria); }
 .soltar-titulo { font-weight: 600; }
-.soltar.enviando { pointer-events: none; opacity: .6; }
+.soltar.enviando { pointer-events: none; border-style: solid; background: var(--relevo); }
+.soltar:has(:focus-visible) { outline: 2px solid var(--primaria); outline-offset: 2px; }
 .arquivos { display: flex; flex-direction: column; }
 .arquivos li { display: flex; align-items: center; gap: var(--e3); padding: var(--e2) 0; }
 .arquivos li + li { border-top: 1px solid var(--linha); }
 .arquivo-texto { display: flex; flex-direction: column; min-width: 0; flex: 1; }
 .arquivo-nome { font-weight: 500; overflow-wrap: anywhere; }
+.arquivo-selos { display: flex; flex-wrap: wrap; gap: 6px; margin-top: var(--e1); }
+.arquivos .btn { min-height: 44px; }
 .agenda { display: flex; flex-direction: column; margin: 0 calc(-1 * var(--e2)); }
 .agenda a { display: flex; align-items: center; gap: var(--e4); padding: var(--e2); border-radius: var(--raio-m); }
 .agenda a:hover { background: var(--relevo); }
@@ -183,7 +189,8 @@ ul.lista { list-style: disc; } ol.lista { list-style: decimal; }
   .proc-texto { flex: 1 1 0; }
   .proc-selos { flex-basis: 100%; justify-content: flex-start; padding-left: calc(4px + var(--e3)); }
   .proc .num { white-space: nowrap; }
-  .fixo { position: static; }
+  .fixo { position: static; max-height: none; overflow: visible; }
+  :root { --topo-altura: 116px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 @media print {

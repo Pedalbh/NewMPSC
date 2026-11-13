@@ -9,8 +9,11 @@
     if (!arquivo) return;
     const enviar = () => {
       const titulo = soltar.querySelector(".soltar-titulo");
-      if (soltar.dataset.enviando && titulo) { titulo.textContent = soltar.dataset.enviando; titulo.setAttribute("role", "status"); }
+      const detalhe = soltar.querySelector(".soltar-detalhe");
+      if (soltar.dataset.enviando && titulo) titulo.textContent = soltar.dataset.enviando;
+      if (soltar.dataset.espera && detalhe) detalhe.textContent = soltar.dataset.espera;
       soltar.classList.add("enviando");
+      arquivo.form.setAttribute("aria-busy", "true");
       arquivo.form.submit();
     };
     arquivo.addEventListener("change", () => { if (arquivo.files.length) enviar(); });
