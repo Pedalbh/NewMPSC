@@ -17,3 +17,19 @@ Aplicação web do promotor (processos, minutas, audiências). Projeto **separad
 - Lógica em Python no servidor; JavaScript só na casca (`app/static/app.js`). Sem script nem estilo embutido no HTML (a política de conteúdo barra).
 - IA e SIG só pelas portas de `app/portas.py`.
 - Visual só pelos tokens de `app/static/app.css`. Textos de tela curtos, em linguagem simples.
+
+## Equipe de agentes (`.claude/agents/`)
+A sessão principal coordena e constrói. Quem faz não confere: a revisão é de um agente que não viu a construção.
+
+| Agente | Quando chamar |
+| --- | --- |
+| `revisor-qualidade` | antes do merge de toda mudança média ou grande |
+| `designer-ux` | toda mudança de tela e todo fluxo novo; olha os prints reais e conta os cliques |
+| `seguranca-lgpd` | login, permissões, envio de arquivo, rede, dependência, hospedagem ou destino novo de dado |
+
+Nível da tarefa, definido no início:
+- **Simples** (texto de tela, ajuste pequeno): construir, testes verdes, merge.
+- **Média** (função nova em área existente): testes primeiro, construir, `revisor-qualidade`; `designer-ux` se houver tela.
+- **Grande ou sensível** (arquitetura, IA, dado, hospedagem): plano curto escrito no PR antes do código, depois os três revisores.
+
+Os pareceres vão como comentário no PR. Defeito apontado é corrigido pela sessão principal e volta ao mesmo revisor. Agente novo só entra se um defeito real mostrar que falta um papel.
