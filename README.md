@@ -39,4 +39,4 @@ O teste `testes/test_navegador.py` faz a jornada inteira num navegador de verdad
 
 `docker build -t newmpsc . && docker run -p 8000:8000 -e NEWMPSC_AMBIENTE=producao -e NEWMPSC_SEGREDO=... -v newmpsc-dados:/dados newmpsc`, atrás de HTTPS. Criar usuários com `python -m app.cli criar-usuario`.
 
-Arquitetura e decisões: `docs/ARQUITETURA.md`. Regras de trabalho: `CLAUDE.md`.
+Arquitetura e decisões: `docs/ARQUITETURA.md`. Regras de trabalho: `CLAUDE.md`. Decisões à espera do titular: `docs/CARTOES.md`.

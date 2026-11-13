@@ -45,6 +45,8 @@ Página digitalizada não tem texto: é contada e avisada. A leitura dessas pág
 - **13/11/2026 – Motor pela API do Claude direta** (titular); jurisprudência conferida pelo JuriBase; fonte de legislação vigente a definir.
 
 ## O que falta para uso real
+As decisões que são do titular estão em `docs/CARTOES.md`.
+
 1. Adaptador do motor com a API do Claude, lendo os autos já guardados; leitura das páginas digitalizadas; verificação de fontes.
 2. Hospedagem e contrato institucionais; parecer de LGPD; registro de acessos.
 3. Migrações de banco (Alembic) e Postgres; limite de tentativas em armazenamento compartilhado.
