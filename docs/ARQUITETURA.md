@@ -1,7 +1,7 @@
 # Arquitetura
 
 ## Ideia
-O usuário trabalha na Mesa; o SIG fica como porta de entrada (planilha exportada) e de saída (minuta em .docx ou texto). Quando houver integração oficial, troca-se o adaptador, não a aplicação.
+O usuário trabalha no NewMPSC; o SIG fica como porta de entrada (planilha exportada) e de saída (minuta em .docx ou texto). Quando houver integração oficial, troca-se o adaptador, não a aplicação.
 
 ```
 navegador ── HTTPS ── servidor (FastAPI)

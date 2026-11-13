@@ -24,4 +24,4 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - run: python -m pytest -q
         env:
-          MESA_EXIGIR_NAVEGADOR: "1"
+          NEWMPSC_EXIGIR_NAVEGADOR: "1"

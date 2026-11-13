@@ -5,10 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="csrf" content="{{ csrf }}">
 <meta name="robots" content="noindex, nofollow">
-<title>{% block titulo %}Mesa{% endblock %}</title>
+<title>{% block titulo %}NewMPSC{% endblock %}</title>
 <link rel="icon" href="/static/icone.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/mesa.css?v={{ versao }}">
-<script src="/static/mesa.js?v={{ versao }}" defer></script>
+<link rel="stylesheet" href="/static/app.css?v={{ versao }}">
+<script src="/static/app.js?v={{ versao }}" defer></script>
 </head>
 <body>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
@@ -16,7 +16,7 @@
 {% if usuario is defined %}
 <header class="topo">
   <div class="topo-dentro">
-    <a class="marca" href="/" aria-label="Mesa, início"><span class="marca-traco" aria-hidden="true"></span>Mesa</a>
+    <a class="marca" href="/" aria-label="NewMPSC, início"><span class="marca-traco" aria-hidden="true"></span>NewMPSC</a>
     <nav aria-label="Principal">
       <a class="aba" href="/" {% if pagina == 'processos' %}aria-current="page"{% endif %}>Processos</a>
       <a class="aba" href="/audiencias" {% if pagina == 'audiencias' %}aria-current="page"{% endif %}>Audiências</a>
@@ -42,6 +42,6 @@
 {% endif %}
 {% block conteudo %}{% endblock %}
 </main>
-{% if usuario is defined %}<footer class="rodape">Mesa {{ versao }} · motor de minutas: {{ config.motor }}</footer>{% endif %}
+{% if usuario is defined %}<footer class="rodape">NewMPSC {{ versao }} · motor de minutas: {{ config.motor }}</footer>{% endif %}
 </body>
 </html>

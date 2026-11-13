@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block titulo %}Processos · NewMPSC{% endblock %}
+{% block conteudo %}
+<section class="saudacao">
+  <h1>{{ saudacao }}, {{ usuario.nome.split(' ')[0] }}</h1>
+  <p class="fraco">
+    {% if total %}{{ total }} processo{{ 's' if total != 1 }} na sua mesa{% else %}Nenhum processo na sua mesa{% endif %}
+    · {{ proximas | length }} audiência{{ 's' if proximas | length != 1 }} nos próximos 7 dias
+  </p>
+</section>
+
+<section class="numeros" aria-label="Resumo da fila">
+  {% for g in range(4) %}
+  <div class="numero {{ 'alerta' if g == 0 and contagem[0] }}">
+    <span class="numero-valor">{{ contagem[g] }}</span>
+    <span class="numero-rotulo">{{ grupos[g] }}</span>
+  </div>
+  {% endfor %}
+</section>
+
+<div class="grade">
+  <section class="cartao principal" aria-labelledby="t-fila">
+    <div class="linha">
+      <h2 id="t-fila">{{ 'Para fazer' if ver == 'a_fazer' else 'Concluídos' }}</h2>
+      <div class="empurra seletor" role="group" aria-label="Qual lista mostrar">
+        <a href="/" {% if ver == 'a_fazer' %}aria-current="true"{% endif %}>Para fazer</a>
+        <a href="/?ver=concluido" {% if ver == 'concluido' %}aria-current="true"{% endif %}>Concluídos</a>
+      </div>
+    </div>
+    {% if processos %}
+    <ul class="fila">
+      {% for p in processos %}
+      <li>
+        <a class="proc" href="/processos/{{ p.id }}">
+          <span class="proc-barra g{{ p.grupo }}" aria-hidden="true"></span>
+          <span class="proc-texto">
+            <span class="num">{{ p.numero }}</span>
+            <span class="fraco">{{ p.classe or 'Classe não informada' }}{% if p.assunto %} · {{ p.assunto }}{% endif %}</span>
+          </span>
+          <span class="proc-selos">
+            {% if p.reu_preso %}<span class="selo erro">Réu preso</span>{% endif %}
+            {% if p.vista | lower == 'urgente' %}<span class="selo atencao">Urgente</span>{% endif %}
+            {% if not p.dv_ok and not config.dados_ficticios %}<span class="selo atencao">Conferir número</span>{% endif %}
+            {% if p.minuta and p.minuta.editada %}<span class="selo andamento">Em edição</span>
+            {% elif p.minuta %}<span class="selo ok">Minuta pronta</span>{% endif %}
+          </span>
+          <span class="proc-data fraco">{{ p.entrada | data }}</span>
+          <span class="seta" aria-hidden="true">›</span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="vazio">
+      {% if ver == 'a_fazer' %}
+      <p class="vazio-titulo">Sua mesa está limpa</p>
+      <p class="fraco">Traga a planilha exportada do SIG e cada processo chega aqui com a primeira minuta pronta.</p>
+      {% else %}
+      <p class="fraco">Nenhum processo concluído ainda.</p>
+      {% endif %}
+    </div>
+    {% endif %}
+  </section>
+
+  <div class="lateral pilha-cartoes">
+    <section class="cartao" aria-labelledby="t-trazer">
+      <h2 id="t-trazer">Trazer processos</h2>
+      <form method="post" action="/processos/importar" enctype="multipart/form-data" id="form-planilha">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="soltar" id="soltar">
+          <input type="file" name="planilha" id="planilha" class="oculto-visual" accept=".xls,.xlsx,.csv,.xml,.html,.txt">
+          <span class="soltar-titulo">Solte aqui a planilha do SIG</span>
+          <span class="fraco pequeno">ou clique para escolher o arquivo</span>
+        </label>
+        <noscript><button class="btn principal largo" type="submit">Enviar planilha</button></noscript>
+      </form>
+      <details>
+        <summary>Colar números de processo</summary>
+        <form method="post" action="/processos/colar" class="pilha">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <label class="campo">Números (um por linha ou texto com os números)
+            <textarea name="numeros" rows="4" required placeholder="0000000-00.0000.8.24.0000"></textarea>
+          </label>
+          <button class="btn" type="submit">Adicionar à mesa</button>
+        </form>
+      </details>
+    </section>
+
+    <section class="cartao" aria-labelledby="t-prox">
+      <div class="linha">
+        <h2 id="t-prox">Próximas audiências</h2>
+        <a class="empurra elo" href="/audiencias">Ver pauta</a>
+      </div>
+      {% if proximas %}
+      <ul class="agenda">
+        {% for a in proximas[:5] %}
+        <li><a href="/audiencias/{{ a.id }}">
+          <span class="agenda-quando"><strong>{{ a.inicio | hora }}</strong><span class="fraco pequeno">{{ a.inicio.strftime('%d/%m') }}</span></span>
+          <span class="proc-texto"><span class="num">{{ a.numero }}</span><span class="fraco">{{ a.tipo }}</span></span>
+        </a></li>
+        {% endfor %}
+      </ul>
+      {% else %}<p class="fraco">Nenhuma audiência nos próximos 7 dias.</p>{% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -5,9 +5,9 @@ WORKDIR /srv
 COPY pyproject.toml ./
 COPY app ./app
 COPY dados_ficticios ./dados_ficticios
-RUN pip install --no-cache-dir . && useradd --system --home /srv mesa && mkdir /dados && chown mesa /dados
-USER mesa
-ENV MESA_BANCO=sqlite:////dados/mesa.db
+RUN pip install --no-cache-dir . && useradd --system --home /srv newmpsc && mkdir /dados && chown newmpsc /dados
+USER newmpsc
+ENV NEWMPSC_BANCO=sqlite:////dados/newmpsc.db
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=3s CMD python -c "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/saude')"
 CMD ["uvicorn", "app.servidor:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

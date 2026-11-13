@@ -1,5 +1,5 @@
 [project]
-name = "mesa"
+name = "newmpsc"
 version = "0.1.0"
 description = "Aplicação web de trabalho do promotor: processos, minutas e audiências"
 requires-python = ">=3.12"
@@ -34,3 +34,13 @@ extend-immutable-calls = ["fastapi.Depends"]
 
 [tool.ruff.lint.per-file-ignores]
 "testes/*" = ["S105", "S106"]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app", "app.nucleo"]
+
+[tool.setuptools.package-data]
+app = ["templates/*.html", "static/*", "static/fontes/*"]

@@ -1,4 +1,4 @@
-# Mesa: regras do repositório
+# NewMPSC: regras do repositório
 
 Aplicação web do promotor (processos, minutas, audiências). Projeto **separado do Gabinete**: nada aqui altera aquele repositório; o que vem de lá entra por cópia registrada em `app/nucleo/ORIGEM.md`.
 
@@ -14,6 +14,6 @@ Aplicação web do promotor (processos, minutas, audiências). Projeto **separad
 - `ruff check .` e `python -m pytest` verdes antes de qualquer PR; tela nova ou alterada entra na jornada de `testes/test_navegador.py`.
 - Defeito achado em uso vira teste no mesmo PR da correção.
 - Mudança visível sobe a versão (`app/__init__.py`, `pyproject.toml`) e ganha linha no `CHANGELOG.md`.
-- Lógica em Python no servidor; JavaScript só na casca (`app/static/mesa.js`). Sem script nem estilo embutido no HTML (a política de conteúdo barra).
+- Lógica em Python no servidor; JavaScript só na casca (`app/static/app.js`). Sem script nem estilo embutido no HTML (a política de conteúdo barra).
 - IA e SIG só pelas portas de `app/portas.py`.
-- Visual só pelos tokens de `app/static/mesa.css`. Textos de tela curtos, em linguagem simples.
+- Visual só pelos tokens de `app/static/app.css`. Textos de tela curtos, em linguagem simples.

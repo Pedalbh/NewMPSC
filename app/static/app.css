@@ -1,4 +1,4 @@
-/* Mesa: design system. Base de produto (clareza do Stripe, acolhimento do Nubank) com a identidade do MPSC
+/* NewMPSC: design system. Base de produto (clareza do Stripe, acolhimento do Nubank) com a identidade do MPSC
    (preto, branco e o vermelho da marca como acento). Todos os valores visuais saem dos tokens abaixo. */
 @font-face { font-family: Inter; font-weight: 400; font-display: swap; src: url("/static/fontes/Inter-400.woff2") format("woff2"); }
 @font-face { font-family: Inter; font-weight: 500; font-display: swap; src: url("/static/fontes/Inter-500.woff2") format("woff2"); }

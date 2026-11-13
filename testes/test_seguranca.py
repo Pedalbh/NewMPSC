@@ -87,8 +87,8 @@ def test_senha_curta_e_recusada_e_hash_confere():
 
 def test_producao_exige_segredo():
     with pytest.raises(RuntimeError):
-        carregar({"MESA_AMBIENTE": "producao"})
-    assert carregar({"MESA_AMBIENTE": "producao", "MESA_SEGREDO": "x" * 32}).producao
+        carregar({"NEWMPSC_AMBIENTE": "producao"})
+    assert carregar({"NEWMPSC_AMBIENTE": "producao", "NEWMPSC_SEGREDO": "x" * 32}).producao
 
 
 def test_saude(cliente):

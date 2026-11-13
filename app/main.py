@@ -41,7 +41,7 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
     conexao = ConexaoPlanilha()
     limite = LimiteTentativas()
 
-    app = FastAPI(title="Mesa", version=VERSAO, docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="NewMPSC", version=VERSAO, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.Sessao, app.state.config, app.state.limite = Sessao, config, limite
     app.mount("/static", StaticFiles(directory=AQUI / "static"), name="static")
     telas = Jinja2Templates(directory=AQUI / "templates")
@@ -64,7 +64,7 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
         return resposta
 
     # Acrescentado depois do middleware de cabeçalhos para rodar antes dele (a sessão precisa existir em toda rota).
-    app.add_middleware(SessionMiddleware, secret_key=config.segredo, session_cookie="mesa_sessao",
+    app.add_middleware(SessionMiddleware, secret_key=config.segredo, session_cookie="newmpsc_sessao",
                        same_site="lax", https_only=config.producao, max_age=8 * 3600)
 
     # ------------------------------------------------------------------ dependências

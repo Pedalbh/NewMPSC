@@ -17,7 +17,7 @@ from .modelos import Usuario, criar_banco
 from .portas import ConexaoPlanilha, criar_motor
 from .seguranca import gerar_hash
 
-EMAIL_DEMO = "demonstracao@mesa.invalid"
+EMAIL_DEMO = "demonstracao@newmpsc.invalid"
 FILA_FICTICIA = Path(__file__).parent.parent / "dados_ficticios" / "fila-sig-ficticia.csv"
 
 

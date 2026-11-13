@@ -1,0 +1,18 @@
+Metadata-Version: 2.4
+Name: newmpsc
+Version: 0.1.0
+Summary: Aplicação web de trabalho do promotor: processos, minutas e audiências
+Requires-Python: >=3.12
+Requires-Dist: fastapi==0.115.6
+Requires-Dist: uvicorn[standard]==0.34.0
+Requires-Dist: jinja2==3.1.5
+Requires-Dist: sqlalchemy==2.0.36
+Requires-Dist: argon2-cffi==23.1.0
+Requires-Dist: itsdangerous==2.2.0
+Requires-Dist: python-multipart==0.0.20
+Requires-Dist: xlrd==2.0.2
+Provides-Extra: dev
+Requires-Dist: pytest==8.3.4; extra == "dev"
+Requires-Dist: httpx==0.28.1; extra == "dev"
+Requires-Dist: ruff==0.8.4; extra == "dev"
+Requires-Dist: playwright==1.49.1; extra == "dev"

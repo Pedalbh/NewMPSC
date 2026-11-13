@@ -1,5 +1,5 @@
 """Ensaio de ponta a ponta num navegador de verdade, do jeito que a pessoa usa: entrar, trazer a planilha, abrir a
-minuta, editar, baixar o Word, marcar audiência. DADOS FICTÍCIOS. Guarda prints em MESA_PRINTS, se definido."""
+minuta, editar, baixar o Word, marcar audiência. DADOS FICTÍCIOS. Guarda prints em NEWMPSC_PRINTS, se definido."""
 import io
 import os
 import socket
@@ -18,13 +18,13 @@ from testes.conftest import FILA, SENHA
 
 pytestmark = pytest.mark.navegador
 sync_api = pytest.importorskip("playwright.sync_api")
-CHROME = os.environ.get("MESA_CHROME", "")
-PRINTS = os.environ.get("MESA_PRINTS")
+CHROME = os.environ.get("NEWMPSC_CHROME", "")
+PRINTS = os.environ.get("NEWMPSC_PRINTS")
 
 
 @pytest.fixture(scope="module")
 def endereco(tmp_path_factory):
-    banco = tmp_path_factory.mktemp("banco") / "mesa.db"
+    banco = tmp_path_factory.mktemp("banco") / "newmpsc.db"
     app = criar_app(Config("teste", "s" * 40, f"sqlite:///{banco}", "demo", True))
     with app.state.Sessao() as db:
         criar_usuario(db, "ana@exemplo.invalid", "Ana Exemplo", SENHA, "Promotora de Justiça")
@@ -57,7 +57,7 @@ def pagina():
             yield pg
             navegador.close()
     except sync_api.Error as e:
-        if os.environ.get("MESA_EXIGIR_NAVEGADOR") == "1":
+        if os.environ.get("NEWMPSC_EXIGIR_NAVEGADOR") == "1":
             raise
         pytest.skip(f"navegador indisponível: {e}")
 
