@@ -1,7 +1,17 @@
 """Tabelas. Cada linha de trabalho pertence a um usuário; ninguém enxerga dado de outro."""
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint, create_engine
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    create_engine,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -40,6 +50,8 @@ class Processo(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     minuta: Mapped["Minuta | None"] = relationship(back_populates="processo", cascade="all, delete-orphan",
                                                     uselist=False)
+    autos: Mapped[list["ArquivoAutos"]] = relationship(back_populates="processo", cascade="all, delete-orphan",
+                                                       order_by="ArquivoAutos.id")
 
 
 class Minuta(Base):
@@ -52,6 +64,33 @@ class Minuta(Base):
     editada: Mapped[bool] = mapped_column(Boolean, default=False)
     atualizada_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     processo: Mapped[Processo] = relationship(back_populates="minuta")
+
+
+class ArquivoAutos(Base):
+    """Um PDF dos autos enviado pelo usuário. Guarda-se o texto de cada página, não o arquivo."""
+    __tablename__ = "arquivos_autos"
+    __table_args__ = (UniqueConstraint("processo_id", "sha256"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
+    nome: Mapped[str] = mapped_column(String(200))
+    tamanho: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+    total_paginas: Mapped[int] = mapped_column(Integer)
+    sem_texto: Mapped[int] = mapped_column(Integer, default=0)   # páginas digitalizadas, sem texto para ler
+    enviado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    processo: Mapped[Processo] = relationship(back_populates="autos")
+    paginas: Mapped[list["PaginaAutos"]] = relationship(back_populates="arquivo", cascade="all, delete-orphan",
+                                                        order_by="PaginaAutos.numero")
+
+
+class PaginaAutos(Base):
+    __tablename__ = "paginas_autos"
+    __table_args__ = (UniqueConstraint("arquivo_id", "numero"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    arquivo_id: Mapped[int] = mapped_column(ForeignKey("arquivos_autos.id"), index=True)
+    numero: Mapped[int] = mapped_column(Integer)
+    texto: Mapped[str] = mapped_column(Text)
+    arquivo: Mapped[ArquivoAutos] = relationship(back_populates="paginas")
 
 
 class Audiencia(Base):

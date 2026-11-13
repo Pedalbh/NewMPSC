@@ -1,5 +1,6 @@
 """Ensaio de ponta a ponta num navegador de verdade, do jeito que a pessoa usa: entrar, trazer a planilha, abrir a
-minuta, editar, baixar o Word, marcar audiência. DADOS FICTÍCIOS. Guarda prints em NEWMPSC_PRINTS, se definido."""
+minuta, editar, baixar o Word, juntar os autos, marcar audiência. DADOS FICTÍCIOS.
+Guarda prints em NEWMPSC_PRINTS, se definido."""
 import io
 import os
 import socket
@@ -14,7 +15,7 @@ import uvicorn
 from app.cli import criar_usuario
 from app.config import Config
 from app.main import criar_app
-from testes.conftest import FILA, SENHA
+from testes.conftest import FILA, RAIZ, SENHA
 
 pytestmark = pytest.mark.navegador
 sync_api = pytest.importorskip("playwright.sync_api")
@@ -115,6 +116,17 @@ def test_jornada_completa(endereco, pagina):
     pg.get_by_role("button", name="Copiar texto").click()
     pg.get_by_role("button", name="Copiado").wait_for()
     assert "Parágrafo novo do teste." in pg.evaluate("navigator.clipboard.readText()")
+
+    # autos: escolher o PDF já envia; a tela mostra o que foi lido e deixa remover
+    pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
+    pg.get_by_text("autos-ficticios.pdf: 3 página(s) lida(s).").wait_for()
+    assert pg.locator(".arquivos li").count() == 1
+    foto(pg, "5b-autos")
+    pg.get_by_role("button", name="Remover autos-ficticios.pdf").click()
+    pg.get_by_text("Arquivo removido dos autos.").wait_for()
+    assert pg.locator(".arquivos li").count() == 0
+    pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
+    pg.locator(".arquivos li").wait_for()
 
     # concluir tira da fila
     pg.get_by_role("button", name="Marcar como concluído").click()

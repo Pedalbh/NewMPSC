@@ -4,13 +4,14 @@ from pathlib import Path
 from urllib.parse import quote
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select, text
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import VERSAO, servicos
+from . import VERSAO, autos, servicos
 from .config import Config, carregar
 from .modelos import Usuario, criar_banco
 from .nucleo import documento
@@ -19,6 +20,9 @@ from .seguranca import LimiteTentativas, conferir_senha, csrf_confere, token_csr
 
 AQUI = Path(__file__).parent
 TETO_PLANILHA = 20 * 1024 * 1024
+TETO_CORPO = autos.TETO_PDF + 10 * 1024 * 1024   # maior requisição aceita de quem entrou
+TETO_CORPO_ANONIMO = 64 * 1024                    # quem não entrou só envia o formulário de login
+MAX_PDFS_POR_ENVIO = 10
 DIAS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
 MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
          "novembro", "dezembro")
@@ -52,7 +56,12 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
 
     @app.middleware("http")
     async def cabecalhos(request: Request, call_next):
-        resposta = await call_next(request)
+        recusa = _corpo_recusado(request)
+        if recusa:
+            resposta = telas.TemplateResponse(request, "erro.html", {"codigo": recusa[0], "mensagem": recusa[1]},
+                                              status_code=recusa[0], headers={"Connection": "close"})
+        else:
+            resposta = await call_next(request)
         resposta.headers.update({
             "Content-Security-Policy": CSP, "X-Content-Type-Options": "nosniff", "X-Frame-Options": "DENY",
             "Referrer-Policy": "same-origin", "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
@@ -62,6 +71,18 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
         if config.producao:
             resposta.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return resposta
+
+    def _corpo_recusado(request: Request) -> tuple[int, str] | None:
+        """Barra a requisição grande demais antes de ler o corpo."""
+        if request.method not in ("POST", "PUT", "PATCH"):
+            return None
+        declarado = request.headers.get("content-length", "")
+        if not declarado.isdigit():
+            return 411, "Envio sem tamanho declarado."
+        teto = TETO_CORPO if request.session.get("uid") else TETO_CORPO_ANONIMO
+        if int(declarado) > teto:
+            return 413, "Envio grande demais."
+        return None
 
     # Acrescentado depois do middleware de cabeçalhos para rodar antes dele (a sessão precisa existir em toda rota).
     app.add_middleware(SessionMiddleware, secret_key=config.segredo, session_cookie="newmpsc_sessao",
@@ -92,7 +113,7 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
         return telas.TemplateResponse(request, nome, ctx, status_code=status)
 
     def avisar(request: Request, tipo: str, textos: str | list[str]) -> None:
-        request.session["aviso"] = {"tipo": tipo, "textos": [textos] if isinstance(textos, str) else textos[:6]}
+        request.session["aviso"] = {"tipo": tipo, "textos": [textos] if isinstance(textos, str) else textos[:8]}
 
     def voltar(caminho: str) -> RedirectResponse:
         return RedirectResponse(caminho, status_code=303)
@@ -227,6 +248,40 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
     @app.get("/processos/{processo_id}", response_class=HTMLResponse)
     def processo(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual)):
         return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta)
+
+    @app.post("/processos/{processo_id}/autos", dependencies=[Depends(exigir_csrf)])
+    async def juntar_autos(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+        destino = f"/processos/{p.id}#autos"
+        enviados = [a for a in (await request.form()).getlist("autos") if not isinstance(a, str) and a.filename]
+        if not enviados:
+            avisar(request, "erro", "Escolha o PDF dos autos.")
+            return voltar(destino)
+        p = db.merge(p)
+        lidos, textos = 0, []
+        for arquivo in enviados[:MAX_PDFS_POR_ENVIO]:
+            nome = arquivo.filename[:200]
+            curto = nome if len(nome) <= 60 else nome[:57] + "…"   # o aviso viaja no cookie da sessão
+            try:
+                leitura = await run_in_threadpool(autos.ler, await arquivo.read(autos.TETO_PDF + 1))
+                avisos = servicos.juntar_autos(db, p, nome, leitura, config.dados_ficticios)
+            except (autos.PdfRecusado, servicos.AutosRecusados) as e:
+                textos.append(f"{curto} não entrou: {e}.")
+                continue
+            lidos += 1
+            textos.append(f"{curto}: {len(leitura.paginas)} página(s) lida(s).")
+            textos += [f"{curto}: {a}." for a in avisos]
+        if len(enviados) > MAX_PDFS_POR_ENVIO:
+            textos.append(f"Só os {MAX_PDFS_POR_ENVIO} primeiros arquivos foram lidos; envie os demais em seguida.")
+        so_leituras = lidos == len(enviados) and len(textos) == lidos
+        avisar(request, "ok" if so_leituras else "atencao" if lidos else "erro", textos)
+        return voltar(destino)
+
+    @app.post("/processos/{processo_id}/autos/{arquivo_id}/remover", dependencies=[Depends(exigir_csrf)])
+    def remover_autos(request: Request, arquivo_id: int, p=Depends(meu_processo), db=Depends(banco)):
+        if not servicos.remover_autos(db, db.merge(p), arquivo_id):
+            raise HTTPException(404, "Arquivo não encontrado.")
+        avisar(request, "ok", "Arquivo removido dos autos.")
+        return voltar(f"/processos/{p.id}#autos")
 
     @app.post("/processos/{processo_id}/situacao", dependencies=[Depends(exigir_csrf)])
     async def situacao(request: Request, p=Depends(meu_processo), db=Depends(banco)):

@@ -33,6 +33,36 @@
       <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
     </section>
 
+    <section class="cartao" id="autos">
+      <h2>Autos</h2>
+      {% if p.autos %}
+      <ul class="arquivos">
+        {% for a in p.autos %}
+        <li>
+          <div class="arquivo-texto">
+            <span class="arquivo-nome">{{ a.nome }}</span>
+            <span class="fraco pequeno">{{ a.total_paginas }} página(s){% if a.sem_texto %} · {{ a.sem_texto }} sem texto{% endif %}</span>
+          </div>
+          <form method="post" action="/processos/{{ p.id }}/autos/{{ a.id }}/remover">
+            <input type="hidden" name="csrf" value="{{ csrf }}">
+            <button class="btn discreto" type="submit" aria-label="Remover {{ a.nome }}">Remover</button>
+          </form>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+      <form method="post" action="/processos/{{ p.id }}/autos" enctype="multipart/form-data">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <label class="soltar" data-enviando="Lendo o arquivo…">
+          <input type="file" name="autos" id="autos-pdf" class="oculto-visual" accept="application/pdf,.pdf" multiple>
+          <span class="soltar-titulo">Solte aqui o PDF dos autos</span>
+          <span class="fraco pequeno">ou clique para escolher · até 50 MB</span>
+        </label>
+        <noscript><button class="btn largo" type="submit">Enviar PDF</button></noscript>
+      </form>
+      <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if config.motor == 'demo' %} O motor de demonstração ainda não lê os autos.{% endif %}</p>
+    </section>
+
     <section class="cartao">
       <h2>Processo</h2>
       <dl class="dados">

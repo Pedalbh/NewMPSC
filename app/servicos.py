@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .modelos import Audiencia, Minuta, Processo, Usuario
+from .autos import Leitura
+from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, Processo, Usuario
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
 from .portas import ConexaoPlanilha, DadosProcesso, Motor
@@ -14,6 +15,7 @@ from .portas import ConexaoPlanilha, DadosProcesso, Motor
 CNJ = re.compile(r"(?<!\d)\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}(?!\d)")
 GRUPOS = ("Réu preso", "Vista urgente", "Intimação", "Outros")
 MAX_COLAGEM = 200
+MAX_ARQUIVOS_AUTOS = 30   # por processo
 TIPOS_AUDIENCIA = ("Instrução e julgamento", "Custódia", "Preliminar", "Justificação", "Plenário do júri", "Outra")
 
 
@@ -119,6 +121,45 @@ def definir_situacao(db: Session, processo: Processo, situacao: str) -> None:
         raise ValueError("situação desconhecida")
     processo.situacao = situacao
     db.commit()
+
+
+class AutosRecusados(ValueError):
+    """A mensagem é a orientação mostrada ao usuário."""
+
+
+def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, ficticio: bool) -> list[str]:
+    """Guarda o texto de um PDF dos autos, página a página, no processo (que já é do usuário).
+    Devolve os avisos para a pessoa conferir. Levanta `AutosRecusados` com a orientação."""
+    if any(a.sha256 == leitura.sha256 for a in processo.autos):
+        raise AutosRecusados("este arquivo já está nos autos")
+    if len(processo.autos) >= MAX_ARQUIVOS_AUTOS:
+        raise AutosRecusados(f"o processo já tem {MAX_ARQUIVOS_AUTOS} arquivos; remova algum antes")
+    numeros = {n for texto in leitura.paginas for n in CNJ.findall(texto)}
+    # limite 1 do projeto: enquanto o servidor for só de dados fictícios, número com dígito verificador válido não entra
+    if ficticio and any(dv_ok(n) for n in numeros):
+        raise AutosRecusados("este servidor só aceita dados fictícios, e o arquivo traz número de processo real")
+    arquivo = ArquivoAutos(nome=nome.strip()[:200] or "autos.pdf", tamanho=leitura.tamanho, sha256=leitura.sha256,
+                           total_paginas=len(leitura.paginas), sem_texto=leitura.sem_texto,
+                           paginas=[PaginaAutos(numero=i, texto=t) for i, t in enumerate(leitura.paginas, start=1)])
+    processo.autos.append(arquivo)
+    db.commit()
+    avisos = []
+    if leitura.sem_texto == len(leitura.paginas):
+        avisos.append("nenhuma página tem texto para ler (arquivo digitalizado)")
+    elif leitura.sem_texto:
+        avisos.append(f"{leitura.sem_texto} página(s) sem texto para ler (digitalizadas)")
+    if leitura.sem_texto < len(leitura.paginas) and processo.numero not in numeros:
+        avisos.append("o número deste processo não aparece no texto; confira se é o arquivo certo")
+    return avisos
+
+
+def remover_autos(db: Session, processo: Processo, arquivo_id: int) -> bool:
+    arquivo = next((a for a in processo.autos if a.id == arquivo_id), None)
+    if arquivo is None:
+        return False
+    processo.autos.remove(arquivo)
+    db.commit()
+    return True
 
 
 def marcar_audiencia(db: Session, usuario: Usuario, numero: str, data: str, hora: str, tipo: str,

@@ -1,6 +1,6 @@
 [project]
 name = "newmpsc"
-version = "0.1.0"
+version = "0.2.0"
 description = "Aplicação web de trabalho do promotor: processos, minutas e audiências"
 requires-python = ">=3.12"
 dependencies = [
@@ -12,6 +12,7 @@ dependencies = [
   "itsdangerous==2.2.0",
   "python-multipart==0.0.20",
   "xlrd==2.0.2",
+  "pypdf==7.1.0",
 ]
 
 [project.optional-dependencies]
