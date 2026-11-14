@@ -58,6 +58,19 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **O que espera:** a etapa 3.
 - **O que você faz:** o contato com o JuriBase.
 
+### C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos?
+- **Por que é sua:** prazo de guarda (LGPD). Veio do parecer de segurança do PR #8: o relatório da IA resume os autos, com a página de cada parágrafo, e fica depois que o texto dos autos é apagado (C1).
+- **Hoje:** a minuta fica para sempre, como trabalho do usuário. Os pontos a enfrentar, que a IA também tira dos autos, já saem junto com os autos.
+- **Opções**
+  - **A.** A minuta fica. É a peça do promotor, editada por ele.
+    - **Depois da decisão:** só o registro aqui.
+  - **B.** A minuta sai junto com os autos, 30 dias depois de concluído. O promotor precisa baixar o Word antes, se quiser guardar.
+    - **Depois da decisão:** a limpeza do C1 apaga também a minuta; a tela do processo concluído avisa; teste.
+  - **C.** A minuta fica, mas a parte escrita pela IA e não editada sai junto com os autos.
+    - **Depois da decisão:** marca, por bloco, o que o usuário editou; a limpeza apaga só o resto; teste e designer.
+- **Recomendo:** A. A minuta é a peça que o promotor assina, e ela já vai para o SIG; apagar aqui não tira o dado do mundo.
+- **O que espera:** nada agora. Precisa estar decidido antes de dado real.
+
 ## Decididos
 
 Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a executar" ou o que ainda falta.

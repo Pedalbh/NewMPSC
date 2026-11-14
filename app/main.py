@@ -56,7 +56,15 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         max_workers=servicos.ESCRITAS_AO_MESMO_TEMPO, thread_name_prefix="minuta").submit
     with Sessao() as db:
         servicos.encerrar_escritas_interrompidas(db)
-        servicos.apagar_autos_vencidos(db, agora())
+
+    def _apagar_vencidos() -> None:
+        try:
+            with Sessao() as db:
+                servicos.apagar_autos_vencidos(db, agora())
+        except Exception:   # a limpeza não derruba a partida nem a requisição; tenta de novo na próxima hora
+            logging.getLogger("newmpsc").exception("guarda dos autos: a limpeza falhou")
+
+    _apagar_vencidos()
     guarda = {"ultima": agora()}   # cartão C1: a limpeza roda na partida e depois no máximo uma vez por hora
 
     app = FastAPI(title="NewMPSC", version=VERSAO, docs_url=None, redoc_url=None, openapi_url=None)
@@ -90,13 +98,6 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         if config.producao:
             resposta.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return resposta
-
-    def _apagar_vencidos() -> None:
-        try:
-            with Sessao() as db:
-                servicos.apagar_autos_vencidos(db, agora())
-        except Exception:   # a limpeza não derruba a requisição; tenta de novo na próxima hora
-            logging.getLogger("newmpsc").exception("guarda dos autos: a limpeza falhou")
 
     def _corpo_recusado(request: Request) -> tuple[int, str] | None:
         """Barra a requisição grande demais antes de ler o corpo."""
@@ -293,7 +294,9 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         """Um arquivo: confere, lê fora da transação do banco e guarda com o nome inteiro. Devolve a frase do
         resultado (com o nome curto, porque o aviso viaja no cookie da sessão) e se há ressalva."""
         autos.conferir(dados)
-        if servicos.autos_repetidos(p, autos.impressao(autos.resumo(dados), config.chave_impressao)):
+        if p.situacao == "concluido":   # antes de gastar uma vaga de leitura
+            raise servicos.AutosRecusados("o processo está concluído; devolva-o à fila para enviar autos")
+        if servicos.autos_repetidos(p, autos.impressao(autos.resumo(dados), config.chave_impressao, p.id)):
             raise servicos.AutosRecusados("este arquivo já está nos autos")
         db.commit()   # devolve a conexão do banco enquanto o PDF é lido
         leitura = autos.ler(dados, tempo=prazo - time.monotonic(), exigir_limites=config.producao)

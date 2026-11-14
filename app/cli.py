@@ -2,6 +2,7 @@
 
   python -m app.cli criar-usuario EMAIL "Nome"      (a senha é pedida no terminal)
   python -m app.cli semente                         (usuário e fila de demonstração, só dados fictícios)
+  python -m app.cli limpar-autos                    (apaga os autos vencidos; para o agendador da hospedagem)
 """
 import getpass
 import secrets
@@ -64,6 +65,9 @@ def main(argv=None) -> None:
             senha = getpass.getpass("Senha (12 caracteres ou mais): ")
             criar_usuario(db, argv[1], argv[2], senha)
             print("Usuário criado.")
+        elif argv == ["limpar-autos"]:
+            # cartão C1: rodar por agendador (cron ou timer) na hospedagem; o servidor também limpa sozinho
+            print(f"Arquivos de autos apagados por prazo: {servicos.apagar_autos_vencidos(db, datetime.now())}")
         elif argv == ["semente"]:
             senha = semente(db, config)
             print(f"Usuário de demonstração: {EMAIL_DEMO}\nSenha (guarde agora; não é mostrada de novo): {senha}")

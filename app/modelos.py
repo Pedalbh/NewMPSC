@@ -108,12 +108,12 @@ class ArquivoAutos(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
     nome: Mapped[str] = mapped_column(String(200))
-    tamanho: Mapped[int] = mapped_column(Integer)
+    tamanho: Mapped[int] = mapped_column(Integer, default=0)   # sempre 0 desde a 0.4.0 (cartão C2)
     # Cartão C2: impressão com chave do servidor. Avisa arquivo repetido, mas não serve de prova fora daqui.
     impressao: Mapped[str] = mapped_column(String(64))
     total_paginas: Mapped[int] = mapped_column(Integer)
     sem_texto: Mapped[int] = mapped_column(Integer, default=0)   # páginas digitalizadas ou ilegíveis
-    caracteres: Mapped[int] = mapped_column(Integer, default=0)  # texto guardado, para a cota do usuário
+    caracteres: Mapped[int] = mapped_column(Integer, default=0)  # para a cota; arredondado em milhares (C2)
     cita_processo: Mapped[bool] = mapped_column(Boolean, default=True)   # o número do processo aparece no texto
     enviado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     processo: Mapped[Processo] = relationship(back_populates="autos")
@@ -181,6 +181,10 @@ def _atualizar(motor, chave_impressao: bytes | None) -> None:
             if "arquivos_autos" in tabelas else set()
         if "sha256" in colunas and "impressao" not in colunas:
             conexao.execute(text("ALTER TABLE arquivos_autos RENAME COLUMN sha256 TO impressao"))
-            for id_, antigo in conexao.execute(text("SELECT id, impressao FROM arquivos_autos")).all():
+            linhas = conexao.execute(text("SELECT id, processo_id, impressao FROM arquivos_autos")).all()
+            for id_, processo_id, antigo in linhas:
                 conexao.execute(text("UPDATE arquivos_autos SET impressao = :i WHERE id = :id"),
-                                {"i": impressao(antigo, chave_impressao), "id": id_})
+                                {"i": impressao(antigo, chave_impressao, processo_id), "id": id_})
+        if colunas:   # cartão C2: tamanho exato e caracteres exatos deixam de ficar (repetir não muda nada)
+            conexao.execute(text("UPDATE arquivos_autos SET tamanho = 0, "
+                                 "caracteres = ((caracteres + 999) / 1000) * 1000 WHERE tamanho <> 0"))

@@ -1,6 +1,7 @@
 """Configuração lida do ambiente (nenhum segredo no código)."""
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 from dataclasses import dataclass
@@ -43,6 +44,9 @@ def carregar(env=None) -> Config:
     if motor != "demo" and not ficticios:
         # Cartão C4: texto de processo real só vai para um serviço de IA depois de contrato institucional.
         raise RuntimeError("motor de IA só com dados fictícios: dado real depende de contrato institucional")
+    if not segredo:
+        logging.getLogger("newmpsc").warning(
+            "NEWMPSC_SEGREDO não definido: sessões e impressões dos autos mudam a cada partida")
     return Config(
         ambiente=ambiente,
         segredo=segredo or secrets.token_urlsafe(32),

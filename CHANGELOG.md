@@ -7,11 +7,13 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em
 ### Adicionado
 - O texto dos autos é apagado sozinho 30 dias depois de o processo ser concluído (cartão C1). A minuta fica. Se o processo voltar à fila, a contagem para; numa nova conclusão, recomeça.
 - Ao concluir, o aviso diz que a minuta fica e em que data o texto dos autos será apagado; a tela do processo concluído repete a data e diz como manter (devolver à fila).
-- Processo concluído não recebe autos novos: para enviar, devolve-se à fila.
+- Processo concluído não recebe autos novos nem pedido de relatório: para isso, devolve-se à fila.
+- Comando `python -m app.cli limpar-autos`, para o agendador da hospedagem. Os pontos a enfrentar tirados dos autos pela IA saem junto com os autos.
+- A imagem do servidor usa o horário de Brasília: a data prometida na tela é a do usuário.
 
 ### Segurança
-- O banco não guarda mais o `sha256` do arquivo enviado (cartão C2). Fica uma impressão feita com chave do servidor: continua avisando arquivo repetido, mas fora do servidor não prova que alguém teve um documento.
-- Banco de versão anterior é convertido na partida. Trocar o segredo do servidor faz os arquivos já guardados deixarem de ser reconhecidos como repetidos.
+- O banco não guarda mais o `sha256` do arquivo enviado, nem o tamanho exato do arquivo e a contagem exata de caracteres (cartão C2). A impressão também leva o processo: o mesmo arquivo em dois processos não fica com a mesma impressão. Fica uma impressão feita com chave do servidor: continua avisando arquivo repetido, mas fora do servidor não prova que alguém teve um documento.
+- Banco de versão anterior é convertido na partida. No SQLite (`secure_delete`) o valor antigo some do arquivo; num Postgres futuro ele só some depois do VACUUM (ARQUITETURA, item 9). Trocar o segredo do servidor faz os arquivos já guardados deixarem de ser reconhecidos como repetidos.
 
 ## [0.3.0] - 2026-11-14
 

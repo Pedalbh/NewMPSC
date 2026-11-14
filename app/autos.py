@@ -65,10 +65,11 @@ def resumo(dados: bytes) -> str:
     return hashlib.sha256(dados).hexdigest()
 
 
-def impressao(resumo_do_arquivo: str, chave: bytes) -> str:
+def impressao(resumo_do_arquivo: str, chave: bytes, processo_id: int) -> str:
     """Cartão C2: impressão que só o servidor refaz (HMAC com chave dele). Fora daqui não prova que alguém
-    teve um documento, porque sem a chave não dá para calcular a impressão de um arquivo conhecido."""
-    return hmac.new(chave, resumo_do_arquivo.encode(), hashlib.sha256).hexdigest()
+    teve um documento, porque sem a chave não dá para calcular a impressão de um arquivo conhecido. Leva o
+    processo: o mesmo arquivo em dois processos (ou de dois usuários) não fica com a mesma impressão."""
+    return hmac.new(chave, f"{processo_id}:{resumo_do_arquivo}".encode(), hashlib.sha256).hexdigest()
 
 
 @contextmanager
