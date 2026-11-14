@@ -17,59 +17,42 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 
 ## Abertos
 
-### C10 · Os "pequenos testes sem contrato" usam dado real?
-- **Por que é sua:** dado real (limite 1 do `CLAUDE.md`). No C4 você escreveu: "podemos fazer pequenos testes sem o contrato institucional, para validar a proposta".
-- **Hoje:** a aplicação recusa ligar o motor de IA com dado real, por qualquer configuração.
+### C14 · Para qual modelo o pedido passa quando o modelo atual declina?
+- **Por que é sua:** destino do dado e custo. Substitui o C11: você escolheu A (`claude-sonnet-5-5`) e pediu as opções de lista.
+- **Fato novo:** pela documentação da Anthropic, a troca feita pelo próprio serviço só aceita, para o `claude-opus-5-5`, os modelos da lista que a Anthropic publica para ele, que deve ser `claude-opus-5` e `claude-opus-4-8`. O `claude-sonnet-5-5` não entra nessa troca. A lista exata só se confirma com a chave da API (C8). Recusa por pedido de "mostrar o raciocínio" nunca é trocada.
 - **Opções**
-  - **A.** Os testes usam autos fictícios, feitos para parecer reais, o que o limite 1 já permite.
-    - **Depois da decisão:** o coordenador monta 2 ou 3 autos fictícios de tipos comuns (furto, tráfico, violência doméstica) para o teste com a API.
-  - **B.** Os testes usam alguns autos reais, anonimizados à mão por você, sem contrato. Exige mudar o limite 1 e assumir o que o C4 deixou como CONFERIR.
-    - **Depois da decisão:** cartão novo com o texto do limite 1 alterado e as condições do teste (quantos autos, quem anonimiza, onde roda, quando apaga).
-- **Recomendo:** A. Valida a proposta sem tirar dado real do MPSC antes do parecer.
-- **O que espera:** o primeiro teste com a API, que também espera a chave (C8).
+  - **A.** Só `claude-opus-5`, pela troca do próprio serviço. Mesma família, preço um pouco maior (US$ 5 / US$ 25 por milhão de tokens).
+    - **Depois da decisão:** troca ligada só para ele, com teste; o registro do pedido guarda qual modelo respondeu; revisor de segurança.
+  - **B.** `claude-opus-5` e depois `claude-opus-4-8`, pela troca do próprio serviço.
+    - **Depois da decisão:** a mesma construção de A, com os dois.
+  - **C.** Deixar a Anthropic escolher por tipo de recusa (`fallbacks: "default"`). Sem lista para manter; o modelo pode mudar sem aviso.
+    - **Depois da decisão:** a mesma construção, sem lista; o registro do pedido mostra o modelo que respondeu.
+  - **D.** Como você escolheu no C11: nova tentativa feita pela aplicação no `claude-sonnet-5-5`. Funciona, mas é um segundo pedido inteiro, pago à parte, e a aplicação passa a decidir a troca.
+    - **Depois da decisão:** nova tentativa no código, só em recusa, com teste e revisor de segurança.
+- **Recomendo:** A. Um modelo reserva só, da mesma família, sem segundo pedido pago.
+- **O que espera:** a troca de modelo do C9. Nada mais.
 
-### C11 · Para quais modelos o pedido pode passar quando o primeiro declina?
-- **Por que é sua:** no C9 você escolheu B ("só para uma lista que você aprovar"), e a resposta não trouxe a lista.
+### C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase?
+- **Por que é sua:** fonte oficial de conteúdo jurídico (limite 5), contrato e destino de dado. Vem do C12 (C: "pesquise outras formas").
+- **O que achei** (trechos de busca em 14/11/2026; as páginas inteiras estão bloqueadas pela rede desta sessão):
+  - nenhuma fonte oficial tem hoje API de busca de jurisprudência que cubra STF, STJ, TJs e TRFs;
+  - DataJud (CNJ): API gratuita, mas só dados do processo, sem ementa nem inteiro teor;
+  - STJ: portal de dados abertos com espelhos e íntegras de acórdãos e precedentes, por download de arquivos, uso livre citando a fonte;
+  - STF, TJs (o TJSC, conferido) e BNP: só pesquisa pela tela, sem API;
+  - CJF: API da jurisprudência federal anunciada para o 1º trimestre de 2027 (fonte secundária);
+  - Escavador e JUDIT: API paga, preço não publicado; Jusbrasil: sem API pública, e o acordo com o CNJ vale só para o Judiciário;
+  - servidores MCP abertos que leem as telas do STF, STJ e TST: gratuitos, mas quebram quando a tela muda.
 - **Opções**
-  - **A.** Só `claude-sonnet-5-5`.
-    - **Depois da decisão:** troca ligada só para ele, com teste e revisão de segurança.
-  - **B.** `claude-sonnet-5-5` e `claude-haiku-5-5`.
-    - **Depois da decisão:** troca ligada para os dois, nessa ordem, com teste e revisão de segurança.
-  - **C.** Outra lista, dita na resposta.
-    - **Depois da decisão:** a mesma construção, com a lista dada.
-- **Recomendo:** A. Um modelo reserva só, e não está confirmado se a troca é compatível com retenção zero (o que só pesa com dado real).
-- **O que espera:** a troca de modelo do C9.
-
-### C12 · Em que condições a aplicação usa o JuriBase?
-- **Por que é sua:** contrato, custo e destino novo de dado (o texto das buscas sai para um terceiro). Vem do levantamento do C6.
-- **O que está publicado** (lido nos trechos de busca em 14/11/2026; as páginas inteiras estão bloqueadas pela rede desta sessão):
-  - acesso por chave gerada no site, sem cartão, com uma "URL do conector" (servidor MCP); não achei API própria para aplicações;
-  - plano grátis com 100 consultas por mês; plano Pro pago, sem preço publicado nos trechos;
-  - privacidade: dados guardados por "até 180 dias", base legal citada é o legítimo interesse; o serviço se diz "produto da PreviusIA" (CNPJ 42.130.949/0001-56, não conferido na Receita).
-- **O que não está publicado:** se a chave pode ser usada por aplicação no servidor; o que acontece com o texto das buscas; país do servidor; termos de uso; uso por órgão público; contato comercial e encarregado.
-- **Opções**
-  - **A.** Você (ou a TI do MPSC) faz o contato com o JuriBase com as perguntas acima e traz as respostas.
-    - **Depois da decisão:** o coordenador escreve as perguntas numa lista curta, pronta para enviar, em `docs/`.
-  - **B.** Liberar `juribase.com.br` na rede desta sessão para o coordenador ler as páginas inteiras (planos, termos, conector) antes do contato.
-    - **Depois da decisão:** o coordenador pede a liberação, lê as páginas e atualiza este cartão; o contato continua com você.
-  - **C.** Desistir do JuriBase como fonte da aplicação e procurar outra.
-    - **Depois da decisão:** levantamento de alternativas, trazido como cartão novo.
-- **Recomendo:** B e depois A. Ler o que já está publicado encurta a conversa.
+  - **A.** Começar pelo STJ: a aplicação baixa os dados abertos e consulta uma base própria, no servidor. A busca não sai do servidor. Cobre só o STJ.
+    - **Depois da decisão:** pedido de liberação de `dadosabertos.web.stj.jus.br` na rede; avaliação dos arquivos e cartão com tamanho, frequência e plano da base.
+  - **B.** Contratar uma API paga (Escavador ou JUDIT). Cobre mais tribunais; a busca sai para o fornecedor.
+    - **Depois da decisão:** lista de perguntas pronta para você enviar (preço, cobertura, retenção das buscas, uso por órgão público).
+  - **C.** Voltar ao JuriBase: ler as páginas inteiras e fazer o contato (opções B e A do C12).
+    - **Depois da decisão:** pedido de liberação de `juribase.com.br` na rede, leitura e lista de perguntas.
+  - **D.** Esperar a API do CJF (2027) e, até lá, toda citação sai "não conferida".
+    - **Depois da decisão:** só o registro aqui; a etapa 3 confere nada até lá.
+- **Recomendo:** A. É fonte oficial, gratuita, e a busca não leva dado para fora. O STJ é o tribunal mais citado em matéria penal; os outros entram depois.
 - **O que espera:** a etapa 3.
-- **O que você faz:** o contato com o JuriBase.
-
-### C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos?
-- **Por que é sua:** prazo de guarda (LGPD). Veio do parecer de segurança do PR #8: o relatório da IA resume os autos, com a página de cada parágrafo, e fica depois que o texto dos autos é apagado (C1).
-- **Hoje:** a minuta fica para sempre, como trabalho do usuário. Os pontos a enfrentar, que a IA também tira dos autos, já saem junto com os autos.
-- **Opções**
-  - **A.** A minuta fica. É a peça do promotor, editada por ele.
-    - **Depois da decisão:** só o registro aqui.
-  - **B.** A minuta sai junto com os autos, 30 dias depois de concluído. O promotor precisa baixar o Word antes, se quiser guardar.
-    - **Depois da decisão:** a limpeza do C1 apaga também a minuta; a tela do processo concluído avisa; teste.
-  - **C.** A minuta fica, mas a parte escrita pela IA e não editada sai junto com os autos.
-    - **Depois da decisão:** marca, por bloco, o que o usuário editou; a limpeza apaga só o resto; teste e designer.
-- **Recomendo:** A. A minuta é a peça que o promotor assina, e ela já vai para o SIG; apagar aqui não tira o dado do mundo.
-- **O que espera:** nada agora. Precisa estar decidido antes de dado real.
 
 ## Decididos
 
@@ -91,3 +74,7 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C7 · O que o motor de IA escreve antes de existir a verificação de fontes | A: o motor escreve só o relatório até existir a verificação de fontes | 14/11/2026 | nada a executar: já está assim |
 | C8 · Qual modelo o motor usa, e com que teto de gasto | A: modelo padrão mantido; custo medido nos primeiros testes | 14/11/2026 | no primeiro teste com a API, que espera a chave |
 | C9 · O que fazer quando o modelo declina um pedido, e onde ele processa | B: troca de modelo só para uma lista aprovada | 14/11/2026 | parado: falta a lista (C11) |
+| C10 · Os "pequenos testes sem contrato" usam dado real | A: testes com autos fictícios feitos para parecer reais | 14/11/2026 | autos em `dados_ficticios/teste-api/`, neste PR |
+| C11 · Para quais modelos o pedido pode passar quando o primeiro declina | A, com observação: só `claude-sonnet-5-5`; pediu as opções de lista | 14/11/2026 | a API não aceita esse modelo como reserva; virou o C14 |
+| C12 · Em que condições a aplicação usa o JuriBase | C, com observação: procurar outra fonte de jurisprudência | 14/11/2026 | pesquisa feita; virou o C15 |
+| C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos | A: a minuta fica | 14/11/2026 | nada a executar |
