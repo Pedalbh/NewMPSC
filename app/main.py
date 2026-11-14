@@ -362,8 +362,9 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
         if nova == "concluido":
-            avisar(request, "ok", "Processo concluído." + (" O texto dos autos será apagado em 30 dias." if p.autos
-                                                            else ""))
+            fim = servicos.autos_apagados_em(p) if p.autos else None
+            avisar(request, "ok", "Processo concluído." + (
+                f" A minuta fica; o texto dos autos será apagado em {fim:%d/%m/%Y}." if fim else ""))
         else:
             avisar(request, "ok", "Processo devolvido à fila.")
         return voltar("/" if nova == "concluido" else f"/processos/{p.id}")

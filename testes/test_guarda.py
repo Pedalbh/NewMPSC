@@ -72,8 +72,19 @@ def concluir(c, processo=1):
 def test_concluir_avisa_e_mostra_a_data_em_que_os_autos_somem(app_relogio, banco):
     ana = entrar(app_relogio, banco, "ana@exemplo.invalid")
     concluir(ana)
-    assert "Processo concluído. O texto dos autos será apagado em 30 dias." in ana.get("/").text
-    assert "O texto destes autos será apagado em 13/12/2026." in ana.get("/processos/1").text
+    assert "Processo concluído. A minuta fica; o texto dos autos será apagado em 13/12/2026." in ana.get("/").text
+    html = ana.get("/processos/1").text
+    assert "A minuta fica. O texto destes autos será apagado em 13/12/2026." in html
+    assert "Para enviar autos, devolva o processo à fila." in html and 'id="autos-pdf"' not in html
+
+
+def test_processo_concluido_nao_recebe_autos(app_relogio, banco):
+    """Um PDF enviado perto do fim do prazo sumiria na data antiga sem aviso."""
+    ana = entrar(app_relogio, banco, "ana@exemplo.invalid")
+    concluir(ana)
+    ana.enviar("/processos/1/autos", files={"autos": ("outro.pdf", pdf(["Processo 0000101-00.2026.8.24.0000"]))})
+    assert "devolva-o à fila para enviar autos" in ana.get("/processos/1").text
+    assert contar(banco, ArquivoAutos) == 1
 
 
 def test_apaga_o_texto_30_dias_depois_de_concluido_e_mantem_a_minuta(app_relogio, banco, relogio):

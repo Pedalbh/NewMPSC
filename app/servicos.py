@@ -357,6 +357,8 @@ def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, f
     nome = nome_de_arquivo(nome)
     if escrevendo(processo):
         raise AutosRecusados("o relatório está sendo escrito com os autos atuais; espere terminar")
+    if processo.situacao == "concluido":   # cartão C1: o prazo de guarda já está contando
+        raise AutosRecusados("o processo está concluído; devolva-o à fila para enviar autos")
     marca = impressao(leitura.sha256, chave_impressao)
     if autos_repetidos(processo, marca):
         raise AutosRecusados("este arquivo já está nos autos")
