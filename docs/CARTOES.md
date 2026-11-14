@@ -32,6 +32,28 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **Recomendo:** A. Um modelo reserva só, da mesma família, sem segundo pedido pago.
 - **O que espera:** a troca de modelo do C9. Nada mais.
 
+### C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase?
+- **Por que é sua:** fonte oficial de conteúdo jurídico (limite 5), contrato e destino de dado. Vem do C12 (C: "pesquise outras formas").
+- **O que achei** (trechos de busca em 14/11/2026; as páginas inteiras estão bloqueadas pela rede desta sessão):
+  - nenhuma fonte oficial tem hoje API de busca de jurisprudência que cubra STF, STJ, TJs e TRFs;
+  - DataJud (CNJ): API gratuita, mas só dados do processo, sem ementa nem inteiro teor;
+  - STJ: portal de dados abertos com espelhos e íntegras de acórdãos e precedentes, por download de arquivos, uso livre citando a fonte;
+  - STF, TJs (o TJSC, conferido) e BNP: só pesquisa pela tela, sem API;
+  - CJF: API da jurisprudência federal anunciada para o 1º trimestre de 2027 (fonte secundária);
+  - Escavador e JUDIT: API paga, preço não publicado; Jusbrasil: sem API pública, e o acordo com o CNJ vale só para o Judiciário;
+  - servidores MCP abertos que leem as telas do STF, STJ e TST: gratuitos, mas quebram quando a tela muda.
+- **Opções**
+  - **A.** Começar pelo STJ: a aplicação baixa os dados abertos e consulta uma base própria, no servidor. A busca não sai do servidor. Cobre só o STJ.
+    - **Depois da decisão:** pedido de liberação de `dadosabertos.web.stj.jus.br` na rede; avaliação dos arquivos e cartão com tamanho, frequência e plano da base.
+  - **B.** Contratar uma API paga (Escavador ou JUDIT). Cobre mais tribunais; a busca sai para o fornecedor.
+    - **Depois da decisão:** lista de perguntas pronta para você enviar (preço, cobertura, retenção das buscas, uso por órgão público).
+  - **C.** Voltar ao JuriBase: ler as páginas inteiras e fazer o contato (opções B e A do C12).
+    - **Depois da decisão:** pedido de liberação de `juribase.com.br` na rede, leitura e lista de perguntas.
+  - **D.** Esperar a API do CJF (2027) e, até lá, toda citação sai "não conferida".
+    - **Depois da decisão:** só o registro aqui; a etapa 3 confere nada até lá.
+- **Recomendo:** A. É fonte oficial, gratuita, e a busca não leva dado para fora. O STJ é o tribunal mais citado em matéria penal; os outros entram depois.
+- **O que espera:** a etapa 3.
+
 ## Decididos
 
 Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a executar" ou o que ainda falta.
@@ -54,5 +76,5 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C9 · O que fazer quando o modelo declina um pedido, e onde ele processa | B: troca de modelo só para uma lista aprovada | 14/11/2026 | parado: falta a lista (C11) |
 | C10 · Os "pequenos testes sem contrato" usam dado real | A: testes com autos fictícios feitos para parecer reais | 14/11/2026 | autos em `dados_ficticios/teste-api/`, neste PR |
 | C11 · Para quais modelos o pedido pode passar quando o primeiro declina | A, com observação: só `claude-sonnet-5-5`; pediu as opções de lista | 14/11/2026 | a API não aceita esse modelo como reserva; virou o C14 |
-| C12 · Em que condições a aplicação usa o JuriBase | C, com observação: procurar outra fonte de jurisprudência | 14/11/2026 | pesquisa em curso; volta como cartão |
+| C12 · Em que condições a aplicação usa o JuriBase | C, com observação: procurar outra fonte de jurisprudência | 14/11/2026 | pesquisa feita; virou o C15 |
 | C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos | A: a minuta fica | 14/11/2026 | nada a executar |
