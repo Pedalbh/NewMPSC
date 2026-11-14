@@ -6,7 +6,7 @@ from typing import Protocol
 
 from .nucleo import tabela
 
-FECHO = "[Comarca], data da assinatura digital.\n\nPromotor(a) de Justiça"
+FECHO = "[COMARCA], data da assinatura digital.\n\nPromotor(a) de Justiça"
 
 
 class MotorIndisponivel(Exception):
@@ -18,6 +18,7 @@ class PaginaDosAutos:
     arquivo: str
     pagina: int
     texto: str
+    arquivo_id: int = 0   # distingue dois arquivos com o mesmo nome
 
 
 @dataclass(frozen=True)
@@ -102,11 +103,11 @@ def esqueleto(processo: DadosProcesso) -> dict:
         "paragrafos": [
             {"secao": "", "texto": "O Ministério Público do Estado de Santa Catarina, por seu Promotor de Justiça, "
                                    "vem aos autos se manifestar nos termos que seguem."},
-            {"secao": "RELATÓRIO", "texto": "[A ESCREVER] Envie os autos em PDF e peça o relatório, ou escreva aqui."},
-            {"secao": "FUNDAMENTAÇÃO", "texto": "[A ESCREVER PELO PROMOTOR]"},
+            {"secao": "RELATÓRIO", "texto": "[ESCREVER: relatório]"},
+            {"secao": "FUNDAMENTAÇÃO", "texto": "[ESCREVER: fundamentação]"},
         ],
         "verbo": "requer",
-        "pedidos": ["[A DEFINIR PELO PROMOTOR]"],
+        "pedidos": ["[DEFINIR: pedido]"],
         "fecho": FECHO,
     }
 

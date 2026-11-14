@@ -28,6 +28,8 @@ def carregar(env=None) -> Config:
     segredo = env.get("NEWMPSC_SEGREDO", "")
     if ambiente == "producao" and len(segredo) < 32:
         raise RuntimeError("NEWMPSC_SEGREDO com 32 caracteres ou mais é obrigatório em produção")
+    if ambiente == "producao" and env.get("ANTHROPIC_LOG"):
+        raise RuntimeError("ANTHROPIC_LOG não pode estar ligado em produção: o registro traria o texto dos autos")
     motor = env.get("NEWMPSC_MOTOR", "demo")
     ficticios = env.get("NEWMPSC_DADOS_FICTICIOS", "1") != "0"
     if motor != "demo" and not ficticios:

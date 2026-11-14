@@ -57,7 +57,12 @@ def endereco_ia(tmp_path_factory):
             time.sleep(1.5)
             return super()._stream(**pedido)
 
-    servidor, url = _servir(tmp_path_factory.mktemp("banco-ia"), "claude", motor=MotorClaude(ClienteLento()))
+    resposta = {"relatorio": [{"texto": "A denúncia imputa a Pessoa A a subtração de um objeto.",
+                               "fontes": [{"arquivo": 1, "pagina": 1}]},
+                              {"texto": "A defesa pede a absolvição.", "fontes": [{"arquivo": 1, "pagina": 3}]}],
+                "pontos_a_enfrentar": ["Há prova da autoria?"]}
+    servidor, url = _servir(tmp_path_factory.mktemp("banco-ia"), "claude",
+                            motor=MotorClaude(ClienteLento(resposta=resposta)))
     yield url
     servidor.should_exit = True
 
@@ -127,12 +132,17 @@ def test_jornada_completa(endereco, pagina):
     foto(pg, "5-minuta-editada")
 
     # baixar o Word com o texto editado
+    # a minuta de demonstração tem trechos entre colchetes: baixar e copiar pedem confirmação
+    perguntas = []
+    pg.once("dialog", lambda d: (perguntas.append(d.message), d.accept()))
     with pg.expect_download() as d:
         pg.get_by_role("link", name="Baixar para o SIG").click()
+    assert "entre colchetes a completar. Baixar assim mesmo?" in perguntas[0]
     assert d.value.suggested_filename == "minuta-0000101-00.2026.8.24.0000.docx"
     xml = zipfile.ZipFile(io.BytesIO(Path(d.value.path()).read_bytes())).read("word/document.xml").decode()
     assert "Parágrafo novo do teste." in xml
 
+    pg.once("dialog", lambda d: d.accept())
     pg.get_by_role("button", name="Copiar texto").click()
     pg.get_by_role("button", name="Copiado").wait_for()
     assert "Parágrafo novo do teste." in pg.evaluate("navigator.clipboard.readText()")
@@ -215,17 +225,59 @@ def test_relatorio_escrito_pelo_motor_de_ia(endereco_ia, pagina):
     pg.get_by_label("Senha").fill(SENHA)
     pg.get_by_role("button", name="Entrar").click()
     pg.set_input_files("#planilha", str(FILA))
+    pg.get_by_text("prontos para receber os autos").wait_for()
+    assert pg.locator(".fila .selo", has_text="Envie os autos").count() == 9
+    foto(pg, "12-mesa-ia")
     pg.locator(".fila .proc").first.click()
-    assert "[A ESCREVER] Envie os autos" in pg.locator("#folha").inner_text()
+    assert "[ESCREVER: relatório]" in pg.locator("#folha").inner_text()
     assert pg.get_by_role("button", name="Escrever o relatório").count() == 0
     pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
     pg.get_by_role("button", name="Escrever o relatório").click()
     pg.get_by_text("Escrevendo o relatório a partir dos autos").wait_for()
-    assert pg.locator("#folha").count() == 0
-    foto(pg, "12-escrevendo")
+    # enquanto escreve, não há folha, nem como baixar, copiar, enviar ou remover autos
+    for some in ("#folha", "#baixar-docx", "#copiar", "#autos-pdf"):
+        assert pg.locator(some).count() == 0
+    assert pg.get_by_role("button", name="Remover autos-ficticios.pdf").count() == 0
+    foto(pg, "13-escrevendo")
     pg.locator("#folha").wait_for(timeout=15000)   # a tela recarrega sozinha quando a escrita termina
-    assert "(autos-ficticios.pdf, p. 1)" in pg.locator("#folha").inner_text()
-    assert "[A DEFINIR PELO PROMOTOR]" in pg.locator("#folha").inner_text()
-    sync_api.expect(pg.get_by_text("Relatório escrito por IA a partir dos autos.")).to_be_visible()
-    foto(pg, "13-relatorio-de-ia")
+    chegada = pg.locator("#resultado-escrita")
+    sync_api.expect(chegada).to_be_focused()        # leitor de tela anuncia que o relatório chegou
+    sync_api.expect(chegada).to_contain_text("Relatório pronto. O relatório foi escrito por IA")
+    folha = pg.locator("#folha").inner_text()
+    assert "A denúncia imputa a Pessoa A a subtração de um objeto. (p. 1)" in folha and "[DEFINIR: pedido]" in folha
+    assert "Há prova da autoria?" in pg.locator("#pontos").inner_text() and "autoria" not in folha
+    assert pg.evaluate("CSS.highlights.get('marca').size") >= 3   # os trechos a completar ficam destacados
+    foto(pg, "14-relatorio-de-ia")
+
+    # baixar com trechos a completar pede confirmação; recusando, nada é baixado
+    perguntas = []
+    pg.once("dialog", lambda d: (perguntas.append(d.message), d.dismiss()))
+    pg.get_by_role("link", name="Baixar para o SIG").click()
+    assert "trechos entre colchetes a completar. Baixar assim mesmo?" in perguntas[0]
+    pg.once("dialog", lambda d: d.accept())
+    with pg.expect_download() as d:
+        pg.get_by_role("link", name="Baixar para o SIG").click()
+    xml = zipfile.ZipFile(io.BytesIO(Path(d.value.path()).read_bytes())).read("word/document.xml").decode()
+    assert "subtração de um objeto. (p. 1)" in xml and "autoria" not in xml
+
+    # depois de editar, escrever de novo exige abrir o aviso e confirmar
+    pg.locator("#folha .b-corpo").first.click()
+    pg.keyboard.type("Edição minha. ")
+    pg.locator("#estado-salvar", has_text="Salva às").wait_for()
+    pg.reload()
+    assert pg.get_by_role("button", name="Escrever de novo").count() == 0
+    pg.get_by_text("Escrever o relatório de novo").click()
+    sync_api.expect(pg.get_by_role("button", name="Apagar minhas alterações e escrever")).to_be_visible()
+
+    # a mesa mostra o estado do relatório
+    pg.get_by_role("link", name="‹ Processos").click()
+    assert pg.locator(".fila .selo", has_text="Em edição").count() == 1
+    pg.set_viewport_size({"width": 390, "height": 800})
+    pg.locator(".fila .proc").first.click()
+    pg.locator("#folha").wait_for()
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    # no celular, o aviso de conferência vem antes da peça
+    assert pg.evaluate("document.querySelector('#resultado-escrita').getBoundingClientRect().top < "
+                       "document.querySelector('#folha').getBoundingClientRect().top")
+    foto(pg, "15-relatorio-celular")
     assert pg.erros == [], pg.erros

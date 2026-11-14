@@ -36,6 +36,7 @@ h1, h2, p, ul, ol, dl, dd { margin: 0; }
 ul, ol { padding: 0; list-style: none; }
 h1 { font-size: 28px; line-height: 36px; font-weight: 600; letter-spacing: -.02em; text-wrap: balance; }
 h2 { font-size: 17px; line-height: 24px; font-weight: 600; letter-spacing: -.01em; }
+h3 { font-size: 14px; line-height: 20px; font-weight: 600; margin: 0; }
 a { color: inherit; text-decoration: none; }
 .elo { color: var(--elo); font-weight: 500; }
 .elo:hover { text-decoration: underline; }
@@ -138,7 +139,6 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .soltar { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: var(--e5) var(--e4); border: 1.5px dashed var(--linha-forte); border-radius: var(--raio-m); cursor: pointer; transition: background var(--rapido), border-color var(--rapido); }
 .soltar:hover, .soltar.sobre, .soltar:focus-within { background: var(--relevo); border-color: var(--primaria); }
 .soltar-titulo { font-weight: 600; }
-.espera { align-items: center; text-align: center; padding: var(--e7) var(--e5); }
 .soltar.enviando { pointer-events: none; border-style: solid; background: var(--relevo); }
 .soltar:has(:focus-visible) { outline: 2px solid var(--primaria); outline-offset: 2px; }
 .arquivos { display: flex; flex-direction: column; }
@@ -158,6 +158,14 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .dia { display: flex; align-items: center; gap: var(--e3); }
 
 /* processo e folha */
+.espera { align-items: center; text-align: center; padding: var(--e7) var(--e5); }
+.barra { width: 100%; max-width: 320px; height: 4px; border-radius: var(--raio-total); background: var(--relevo); overflow: hidden; }
+.barra span { display: block; width: 40%; height: 100%; border-radius: var(--raio-total); background: var(--primaria); animation: vai-e-vem 1.6s ease-in-out infinite alternate; }
+@keyframes vai-e-vem { from { transform: translateX(-20%); } to { transform: translateX(170%); } }
+@media (prefers-reduced-motion: reduce) { .barra span { animation: none; width: 100%; opacity: .5; } }
+::highlight(marca) { background: var(--atencao-fundo); color: var(--atencao); }   /* trechos entre colchetes a completar */
+#resultado-escrita:focus { outline: none; }
+details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .cabecalho-proc { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--e4); }
 .cabecalho-proc h1 { margin: 2px 0; }
 .folha { background: var(--papel); color: var(--tinta-papel); border: 1px solid var(--linha); border-radius: 4px; box-shadow: var(--sombra); max-width: 794px; margin: 0 auto;

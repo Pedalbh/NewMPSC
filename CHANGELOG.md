@@ -5,14 +5,19 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em
 ## [0.3.0] - 2026-11-14
 
 ### Adicionado
-- Motor de IA pela API do Claude (`NEWMPSC_MOTOR=claude`): na tela do processo, com os autos enviados, o botão "Escrever o relatório" pede o relatório ao modelo. Cada parágrafo sai com a página de onde veio.
-- O motor escreve só o relatório dos fatos e a lista de pontos a enfrentar. Fundamentação e pedido ficam marcados para o promotor escrever; citação jurídica só entra depois que houver verificação de fontes.
-- A escrita roda fora da tela: a pessoa pode sair e voltar. Falha do serviço mantém a minuta anterior e mostra o motivo.
+- Motor de IA pela API do Claude (`NEWMPSC_MOTOR=claude`): na tela do processo, com os autos enviados, o botão "Escrever o relatório" pede o relatório ao modelo. Cada parágrafo sai com a página dos autos de onde veio.
+- O motor escreve só o relatório dos fatos. Fundamentação e pedido ficam marcados para o promotor; os pontos a enfrentar aparecem numa lista na tela e não entram no arquivo.
+- Trechos a completar ou conferir ficam entre colchetes, destacados na folha. Baixar ou copiar com trechos pendentes pede confirmação.
+- A escrita roda fora da tela: a pessoa pode sair e voltar, e a mesa mostra "Escrevendo…", "Relatório pronto" ou "Relatório falhou". Falha do serviço mantém a minuta anterior e mostra o motivo.
+- Minuta já editada só é substituída por um relatório novo com confirmação.
+- Com o motor de IA, o processo chega à mesa com a minuta em branco e a ficha de audiência sai em branco.
 
 ### Segurança
-- O motor de IA não liga com dado real: `NEWMPSC_MOTOR=claude` com `NEWMPSC_DADOS_FICTICIOS=0` impede a partida do servidor.
-- O texto dos autos vai ao modelo como dado, entre marcas próprias. A resposta só tem campo para relatório e pontos, e cada página citada é conferida contra as que foram enviadas.
-- Uma escrita por vez por usuário e 20 pedidos por hora.
+- O motor de IA não liga com dado real, por nenhum caminho de configuração. Em servidor de dados fictícios, processo com número real não é enviado.
+- Sai do servidor só a classe, o assunto e o texto das páginas dos autos daquele processo. Não saem o número do processo nem o nome dos arquivos. O processamento é pedido para os Estados Unidos.
+- O texto dos autos vai ao modelo como dado, entre marcas que ele não consegue fechar. A resposta só tem campo para relatório e pontos. Parágrafo sem página, com citação jurídica ou com fórmula de pedido sai marcado para conferência.
+- Destino e chave do serviço fixados no código; registro de depuração e telemetria da biblioteca desligados; modelo só de uma lista fechada.
+- Cada pedido fica registrado (quem, qual processo, quando, qual modelo respondeu), sem conteúdo. Limites por usuário: uma escrita por vez, 20 pedidos por hora e 60 por dia.
 
 ## [0.2.0] - 2026-11-13
 
