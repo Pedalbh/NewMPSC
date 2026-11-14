@@ -40,6 +40,24 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **Recomendo:** A. Um modelo reserva só, e não está confirmado se a troca é compatível com retenção zero (o que só pesa com dado real).
 - **O que espera:** a troca de modelo do C9.
 
+### C12 · Em que condições a aplicação usa o JuriBase?
+- **Por que é sua:** contrato, custo e destino novo de dado (o texto das buscas sai para um terceiro). Vem do levantamento do C6.
+- **O que está publicado** (lido nos trechos de busca em 14/11/2026; as páginas inteiras estão bloqueadas pela rede desta sessão):
+  - acesso por chave gerada no site, sem cartão, com uma "URL do conector" (servidor MCP); não achei API própria para aplicações;
+  - plano grátis com 100 consultas por mês; plano Pro pago, sem preço publicado nos trechos;
+  - privacidade: dados guardados por "até 180 dias", base legal citada é o legítimo interesse; o serviço se diz "produto da PreviusIA" (CNPJ 42.130.949/0001-56, não conferido na Receita).
+- **O que não está publicado:** se a chave pode ser usada por aplicação no servidor; o que acontece com o texto das buscas; país do servidor; termos de uso; uso por órgão público; contato comercial e encarregado.
+- **Opções**
+  - **A.** Você (ou a TI do MPSC) faz o contato com o JuriBase com as perguntas acima e traz as respostas.
+    - **Depois da decisão:** o coordenador escreve as perguntas numa lista curta, pronta para enviar, em `docs/`.
+  - **B.** Liberar `juribase.com.br` na rede desta sessão para o coordenador ler as páginas inteiras (planos, termos, conector) antes do contato.
+    - **Depois da decisão:** o coordenador pede a liberação, lê as páginas e atualiza este cartão; o contato continua com você.
+  - **C.** Desistir do JuriBase como fonte da aplicação e procurar outra.
+    - **Depois da decisão:** levantamento de alternativas, trazido como cartão novo.
+- **Recomendo:** B e depois A. Ler o que já está publicado encurta a conversa.
+- **O que espera:** a etapa 3.
+- **O que você faz:** o contato com o JuriBase.
+
 ## Decididos
 
 Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a executar" ou o que ainda falta.
@@ -56,7 +74,7 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C3 · Quanto texto de autos cada usuário pode guardar | A: números provisórios mantidos; revisão com autos reais | 14/11/2026 | nada a executar agora |
 | C4 · O que precisa existir antes de texto real ir para a API do Claude | A, com observação: etapa 2 só com dados fictícios; dado real barrado até o contrato; resumo para TI e encarregado | 14/11/2026 | resumo em `docs/RESUMO-C4.md`; a observação virou o C10 |
 | C5 · Qual fonte de legislação vigente a aplicação consulta | A: na etapa 3 só jurisprudência é conferida; citação de lei sai "não conferida" | 14/11/2026 | entra na etapa 3, com a avaliação de Planalto e LexML trazida em cartão |
-| C6 · Como a aplicação passa a acessar o JuriBase | B: o coordenador levanta o que o JuriBase publica | 14/11/2026 | levantamento em curso; volta como cartão |
+| C6 · Como a aplicação passa a acessar o JuriBase | B: o coordenador levanta o que o JuriBase publica | 14/11/2026 | levantamento feito; virou o C12 |
 | C7 · O que o motor de IA escreve antes de existir a verificação de fontes | A: o motor escreve só o relatório até existir a verificação de fontes | 14/11/2026 | nada a executar: já está assim |
 | C8 · Qual modelo o motor usa, e com que teto de gasto | A: modelo padrão mantido; custo medido nos primeiros testes | 14/11/2026 | no primeiro teste com a API, que espera a chave |
 | C9 · O que fazer quando o modelo declina um pedido, e onde ele processa | B: troca de modelo só para uma lista aprovada | 14/11/2026 | parado: falta a lista (C11) |
