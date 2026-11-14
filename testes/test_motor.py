@@ -56,18 +56,19 @@ class Fluxo:
 class ClienteFalso:
     """Imita só o que o adaptador usa: `messages.stream(...)` como contexto com `get_final_message()`."""
 
-    def __init__(self, resposta=None, stop_reason="end_turn", erro=None, texto=None):
-        self.pedidos, self._erro, self._stop = [], erro, stop_reason
+    def __init__(self, resposta=None, stop_reason="end_turn", erro=None, texto=None, antes=()):
+        self.pedidos, self._erro, self._stop, self._antes = [], erro, stop_reason, list(antes)
         self._texto = json.dumps(resposta if resposta is not None else RESPOSTA) if texto is None else texto
         self.messages = SimpleNamespace(stream=self._stream)
+        self.beta = SimpleNamespace(messages=SimpleNamespace(stream=self._stream))   # usado com a reserva (C14)
 
     def _stream(self, **pedido):
         self.pedidos.append(pedido)
         if self._erro:
             raise self._erro
         return Fluxo(SimpleNamespace(stop_reason=self._stop, model="modelo-que-respondeu",
-                                     content=[SimpleNamespace(type="thinking", thinking=""),
-                                              SimpleNamespace(type="text", text=self._texto)]))
+                                     content=self._antes + [SimpleNamespace(type="thinking", thinking=""),
+                                                            SimpleNamespace(type="text", text=self._texto)]))
 
 
 def _erro_da_api(classe, status):
@@ -96,6 +97,23 @@ def test_pedido_leva_os_autos_como_dado_e_so_o_necessario():
     assert NUMERO not in conteudo                             # nem o número do processo
     assert pedido["output_config"]["format"]["type"] == "json_schema" and pedido["inference_geo"] == "us"
     assert not {"fallbacks", "betas", "thinking", "temperature"} & set(pedido)
+
+
+def test_modelo_padrao_pede_ao_servico_a_reserva_so_no_claude_opus_5():
+    """Cartão C14 (A): se o modelo padrão declinar, o próprio serviço passa o pedido ao claude-opus-5, e só a ele."""
+    cliente = ClienteFalso()
+    minuta = MotorClaude(cliente).elaborar_minuta(PROCESSO)
+    (pedido,) = cliente.pedidos
+    assert pedido["model"] == "claude-opus-5-5" and pedido["fallbacks"] == [{"model": "claude-opus-5"}]
+    assert pedido["betas"] == ["server-side-fallback-2026-07-01"] and pedido["inference_geo"] == "us"
+    assert minuta["modelo"] == "modelo-que-respondeu"   # o registro guarda quem respondeu de fato
+
+
+def test_o_que_o_modelo_escreveu_antes_de_declinar_nao_entra_na_minuta():
+    antes = [SimpleNamespace(type="text", text='{"relatorio": [{"texto": "começo do primeiro'),
+             SimpleNamespace(type="fallback")]
+    minuta = MotorClaude(ClienteFalso(antes=antes)).elaborar_minuta(PROCESSO)
+    assert not any("começo do primeiro" in t for t in textos_de(minuta))
 
 
 def test_texto_dos_autos_nao_fecha_as_marcas_nem_forja_pagina():

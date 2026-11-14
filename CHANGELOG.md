@@ -2,6 +2,11 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.4.1] - 2026-11-14
+
+### Segurança
+- Se o modelo padrão (`claude-opus-5-5`) declinar o relatório, o próprio serviço passa o pedido ao `claude-opus-5`, e só a ele (cartão C14). O registro do pedido guarda o modelo que respondeu. O que o primeiro modelo escreveu antes de declinar não entra na minuta. Os outros modelos da lista seguem sem reserva.
+
 ## [0.4.0] - 2026-11-14
 
 ### Adicionado

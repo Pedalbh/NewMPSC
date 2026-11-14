@@ -17,42 +17,7 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 
 ## Abertos
 
-### C14 · Para qual modelo o pedido passa quando o modelo atual declina?
-- **Por que é sua:** destino do dado e custo. Substitui o C11: você escolheu A (`claude-sonnet-5-5`) e pediu as opções de lista.
-- **Fato novo:** pela documentação da Anthropic, a troca feita pelo próprio serviço só aceita, para o `claude-opus-5-5`, os modelos da lista que a Anthropic publica para ele, que deve ser `claude-opus-5` e `claude-opus-4-8`. O `claude-sonnet-5-5` não entra nessa troca. A lista exata só se confirma com a chave da API (C8). Recusa por pedido de "mostrar o raciocínio" nunca é trocada.
-- **Opções**
-  - **A.** Só `claude-opus-5`, pela troca do próprio serviço. Mesma família, preço um pouco maior (US$ 5 / US$ 25 por milhão de tokens).
-    - **Depois da decisão:** troca ligada só para ele, com teste; o registro do pedido guarda qual modelo respondeu; revisor de segurança.
-  - **B.** `claude-opus-5` e depois `claude-opus-4-8`, pela troca do próprio serviço.
-    - **Depois da decisão:** a mesma construção de A, com os dois.
-  - **C.** Deixar a Anthropic escolher por tipo de recusa (`fallbacks: "default"`). Sem lista para manter; o modelo pode mudar sem aviso.
-    - **Depois da decisão:** a mesma construção, sem lista; o registro do pedido mostra o modelo que respondeu.
-  - **D.** Como você escolheu no C11: nova tentativa feita pela aplicação no `claude-sonnet-5-5`. Funciona, mas é um segundo pedido inteiro, pago à parte, e a aplicação passa a decidir a troca.
-    - **Depois da decisão:** nova tentativa no código, só em recusa, com teste e revisor de segurança.
-- **Recomendo:** A. Um modelo reserva só, da mesma família, sem segundo pedido pago.
-- **O que espera:** a troca de modelo do C9. Nada mais.
-
-### C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase?
-- **Por que é sua:** fonte oficial de conteúdo jurídico (limite 5), contrato e destino de dado. Vem do C12 (C: "pesquise outras formas").
-- **O que achei** (trechos de busca em 14/11/2026; as páginas inteiras estão bloqueadas pela rede desta sessão):
-  - nenhuma fonte oficial tem hoje API de busca de jurisprudência que cubra STF, STJ, TJs e TRFs;
-  - DataJud (CNJ): API gratuita, mas só dados do processo, sem ementa nem inteiro teor;
-  - STJ: portal de dados abertos com espelhos e íntegras de acórdãos e precedentes, por download de arquivos, uso livre citando a fonte;
-  - STF, TJs (o TJSC, conferido) e BNP: só pesquisa pela tela, sem API;
-  - CJF: API da jurisprudência federal anunciada para o 1º trimestre de 2027 (fonte secundária);
-  - Escavador e JUDIT: API paga, preço não publicado; Jusbrasil: sem API pública, e o acordo com o CNJ vale só para o Judiciário;
-  - servidores MCP abertos que leem as telas do STF, STJ e TST: gratuitos, mas quebram quando a tela muda.
-- **Opções**
-  - **A.** Começar pelo STJ: a aplicação baixa os dados abertos e consulta uma base própria, no servidor. A busca não sai do servidor. Cobre só o STJ.
-    - **Depois da decisão:** pedido de liberação de `dadosabertos.web.stj.jus.br` na rede; avaliação dos arquivos e cartão com tamanho, frequência e plano da base.
-  - **B.** Contratar uma API paga (Escavador ou JUDIT). Cobre mais tribunais; a busca sai para o fornecedor.
-    - **Depois da decisão:** lista de perguntas pronta para você enviar (preço, cobertura, retenção das buscas, uso por órgão público).
-  - **C.** Voltar ao JuriBase: ler as páginas inteiras e fazer o contato (opções B e A do C12).
-    - **Depois da decisão:** pedido de liberação de `juribase.com.br` na rede, leitura e lista de perguntas.
-  - **D.** Esperar a API do CJF (2027) e, até lá, toda citação sai "não conferida".
-    - **Depois da decisão:** só o registro aqui; a etapa 3 confere nada até lá.
-- **Recomendo:** A. É fonte oficial, gratuita, e a busca não leva dado para fora. O STJ é o tribunal mais citado em matéria penal; os outros entram depois.
-- **O que espera:** a etapa 3.
+Nenhum.
 
 ## Decididos
 
@@ -78,3 +43,5 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C11 · Para quais modelos o pedido pode passar quando o primeiro declina | A, com observação: só `claude-sonnet-5-5`; pediu as opções de lista | 14/11/2026 | a API não aceita esse modelo como reserva; virou o C14 |
 | C12 · Em que condições a aplicação usa o JuriBase | C, com observação: procurar outra fonte de jurisprudência | 14/11/2026 | pesquisa feita; virou o C15 |
 | C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos | A: a minuta fica | 14/11/2026 | nada a executar |
+| C14 · Para qual modelo o pedido passa quando o modelo atual declina | A: só `claude-opus-5`, pela troca do próprio serviço | 14/11/2026 | PR #11 |
+| C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase | A: base própria com os dados abertos do STJ | 14/11/2026 | avaliação dos arquivos em curso; volta como cartão com o plano da base |
