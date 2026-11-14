@@ -16,7 +16,7 @@ Desde a etapa 2, ela pode pedir a um modelo de IA (API do Claude, da Anthropic, 
 - **Não sai:** o número do processo, o nome dos arquivos, dados do usuário.
 - **Para onde:** API da Anthropic, com processamento pedido nos Estados Unidos.
 - **Registro local:** cada pedido fica registrado (quem, qual processo, quando, qual modelo), sem conteúdo.
-- **Guarda local:** o texto dos autos é apagado sozinho 30 dias depois de o processo ser concluído (cartão C1, em construção).
+- **Guarda local:** o texto dos autos é apagado sozinho 30 dias depois de o processo ser concluído (cartão C1).
 
 ## O que precisa ser decidido pela instituição
 1. **Base legal** para o envio. CONFERIR: LGPD, art. 4º, III, "d", e art. 33.
