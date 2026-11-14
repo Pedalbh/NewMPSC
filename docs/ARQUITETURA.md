@@ -46,7 +46,7 @@ O usuário envia os autos e pede o relatório na tela do processo. A escrita rod
 - **Texto dos autos é dado:** os sinais de menor e de maior do texto são trocados antes do envio, então uma página não fecha as marcas nem forja outra página. A instrução do modelo manda relatar, não obedecer. Uma ordem escondida nos autos pode, no máximo, levar a um parágrafo de relatório errado, que o promotor confere; não muda a estrutura da peça.
 - **Sem troca automática de modelo:** se o modelo declina, a escrita falha com aviso, em vez de a API passar o pedido a outro modelo.
 - **Registro:** `pedidos_ia` guarda quem pediu, para qual processo, quando, o resultado e o modelo que respondeu. Sem conteúdo. O registro de depuração e a telemetria da biblioteca ficam desligados, porque trariam o texto dos autos.
-- **Limites:** 1,5 milhão de caracteres de autos por pedido; uma escrita por vez por usuário e quatro no servidor; 20 pedidos por hora e 60 por dia por usuário; 10 minutos para a resposta inteira; escrita com mais de 15 minutos é dada como falha, e um resultado que chegue depois disso é descartado. Os limites de concorrência valem por processo do servidor.
+- **Limites:** 1,5 milhão de caracteres de autos por pedido; uma escrita por vez por usuário e quatro no servidor; 20 pedidos por hora e 60 por dia por usuário; 10 minutos para a resposta inteira, sem nova tentativa automática; escrita com mais de 15 minutos é dada como falha, e um resultado que chegue depois disso é descartado. Os limites de concorrência valem por processo do servidor.
 
 ## Decisões
 - **13/11/2026 – Projeto separado do Gabinete** (titular). A aplicação web não muda a estrutura do Gabinete; reuso por cópia.

@@ -24,8 +24,8 @@ MODELO_PADRAO = "claude-opus-5-5"
 MODELOS = (MODELO_PADRAO, "claude-sonnet-5-5", "claude-haiku-5-5")
 ENDERECO = "https://api.anthropic.com"
 REGIAO = "us"                # onde o modelo processa; sem isso o padrão do serviço é qualquer região
-TEMPO = 240                  # segundos sem receber nada do serviço, por tentativa
-TEMPO_TOTAL = 600            # segundos para a resposta inteira; menor que o prazo da escrita no servidor
+TEMPO = 120                  # segundos sem receber nada do serviço
+TEMPO_TOTAL = 600            # segundos para a resposta inteira; com as esperas, fica abaixo do prazo da escrita
 # o que mais houver no ambiente que mude o destino ou a credencial impede a partida, em vez de valer em silêncio
 VARIAVEIS_RECUSADAS = ("ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL")
 MAX_CARACTERES = 1_500_000   # texto dos autos numa só chamada; acima disso a pessoa escolhe o que enviar
@@ -37,12 +37,13 @@ _CITACAO = re.compile(
     r"\b(art(igo)?s?\.?\s*\d|artigo\s+\w+|lei\s*(n\.?\s*[ºo°]?|complementar|federal|estadual)?\s*\d|s[úu]mula|"
     r"tema\s+(n\.?\s*[ºo°]?\s*)?\d|STF|STJ|TJ[A-Z]{2}|TRF|supremo|superior\s+tribunal|tribunal\s+de\s+justi[çc]a|"
     r"C(P|PP|F|TB|PM|PPM)\b|HC\s*n?\.?\s*\d|REsp|RE\s+\d|c[óo]digo\s+(penal|de\s+processo|de\s+tr[âa]nsito)|"
-    r"constitui[çc][ãa]o\s+federal|jurisprud[êe]ncia|precedente)", re.IGNORECASE)
+    r"constitui[çc][ãa]o\s+federal|jurisprud[êe]ncia|corte\s+superior|AgRg|EDcl|RHC)", re.IGNORECASE)
 # fórmula de fecho, ou o Ministério Público pedindo: "a defesa requereu" é fato dos autos e não é marcado
 _PEDIDO = re.compile(
-    r"\b((ante|diante)\s+do\s+exposto|em\s+face\s+do\s+exposto|isto\s+posto|pelo\s+exposto|"
-    r"(minist[ée]rio\s+p[úu]blico|parquet|promotor(a)?(\s+de\s+justi[çc]a)?)\s+"
-    r"(requer|pede|pugna|postula|opina|manifesta-se|promove)\b|(promove|requer|pugna|opina)-se)", re.IGNORECASE)
+    r"\b((ante|diante)\s+do\s+exposto|em\s+face\s+do\s+exposto|isto\s+posto|(pelo|por\s+todo\s+o)\s+exposto|"
+    r"(minist[ée]rio\s+p[úu]blico|MP|parquet|[óo]rg[ãa]o\s+ministerial|promotor(a)?(\s+de\s+justi[çc]a)?)\s+"
+    r"(requer|pede|pugna|postula|opina|manifesta-se|promove)\b|(promove|requer|pugna|opina)-se|"
+    r"requeiro|pugno|opino\s+pel)", re.IGNORECASE)
 
 SISTEMA = """Você ajuda um Promotor de Justiça do Ministério Público de Santa Catarina a preparar uma manifestação \
 num processo criminal. Seu trabalho é só a parte de fato: resumir o que os autos dizem e apontar o que o promotor \
@@ -108,7 +109,7 @@ def criar_cliente() -> anthropic.Anthropic:
             raise RuntimeError(f"{variavel} não pode estar definida: o destino e a credencial da IA são fixos")
     for registrador in ("anthropic", "httpx2", "httpcore2"):   # em DEBUG, o registro traria o texto dos autos
         logging.getLogger(registrador).setLevel(logging.WARNING)
-    return anthropic.Anthropic(api_key=chave, base_url=ENDERECO, timeout=TEMPO, max_retries=1,
+    return anthropic.Anthropic(api_key=chave, base_url=ENDERECO, timeout=TEMPO, max_retries=0,
                                open_telemetry={"traces": False, "propagation": False})
 
 
@@ -143,6 +144,12 @@ def _rotulo(nome: str) -> str:
 def _rotulos(nomes: dict[int, str]) -> dict[int, str]:
     """Rótulo de cada arquivo. Os que ficariam iguais ganham a posição na lista de autos, para não confundir."""
     curtos = {numero: _rotulo(nome) for numero, nome in nomes.items()}
+    todos = list(curtos.values())
+    for numero, curto in list(curtos.items()):
+        if todos.count(curto) > 1:   # mesmo começo: o que distingue costuma estar no fim do nome
+            inteiro = re.sub(r"\.pdf$", "", nomes[numero], flags=re.IGNORECASE).strip()
+            fim = re.search(r"[\s\-_.,;](.{8,23})$", inteiro)
+            curtos[numero] = (fim.group(1) if fim else inteiro[-24:]).lstrip(" -_.,;")
     todos = list(curtos.values())
     return {n: f"{n}º arquivo, {r}" if todos.count(r) > 1 else r for n, r in curtos.items()}
 
@@ -184,10 +191,12 @@ class MotorClaude:
     def elaborar_minuta(self, processo: DadosProcesso) -> dict:
         texto, nomes = _autos_em_texto(processo.autos)
         if not texto:
-            raise MotorIndisponivel("os autos enviados não têm texto para ler (páginas digitalizadas)")
+            raise MotorIndisponivel(
+                "os autos enviados não têm texto para ler (páginas digitalizadas)",
+                passageira=False)
         if len(texto) > MAX_CARACTERES:
             raise MotorIndisponivel("os autos são grandes demais para uma só leitura; deixe no processo só os "
-                                    "arquivos que importam para esta manifestação")
+                                    "arquivos que importam para esta manifestação", passageira=False)
         # o número do processo não vai: a minuta usa o que está no servidor
         pedido = (f"Classe: {processo.classe or 'não informada'}. Assunto: {processo.assunto or 'não informado'}."
                   f"\n\n<autos>\n{texto}\n</autos>\n\nEscreva o relatório e os pontos a enfrentar, conforme as regras.")
@@ -215,23 +224,27 @@ class MotorClaude:
                         raise MotorIndisponivel("a IA demorou demais para responder; tente de novo")
                 mensagem = fluxo.get_final_message()
         except anthropic.AuthenticationError:
-            raise MotorIndisponivel("o serviço de IA não está configurado. Avise o suporte do NewMPSC") from None
+            raise MotorIndisponivel(
+                "o serviço de IA não está configurado. Avise o suporte do NewMPSC",
+                passageira=False) from None
         except anthropic.RateLimitError:
             raise MotorIndisponivel("o serviço de IA está no limite de uso; tente de novo em alguns minutos") from None
         except anthropic.APIStatusError as e:
             if e.status_code == 413:
                 raise MotorIndisponivel("os autos são grandes demais para uma só leitura; deixe no processo só os "
-                                        "arquivos que importam para esta manifestação") from None
+                                        "arquivos que importam para esta manifestação", passageira=False) from None
             if e.status_code >= 500 or e.status_code < 400:   # abaixo de 400: erro vindo no meio da resposta
                 raise MotorIndisponivel("o serviço de IA está fora do ar; tente de novo em alguns minutos") from None
-            raise MotorIndisponivel("o serviço de IA não aceitou o pedido. Avise o suporte do NewMPSC") from None
+            raise MotorIndisponivel(
+                "o serviço de IA não aceitou o pedido. Avise o suporte do NewMPSC",
+                passageira=False) from None
         except anthropic.APIConnectionError:
             raise MotorIndisponivel("não foi possível falar com o serviço de IA; tente de novo") from None
         if mensagem.stop_reason == "refusal":
-            raise MotorIndisponivel("a IA não aceitou escrever este relatório; escreva à mão")
+            raise MotorIndisponivel("a IA não aceitou escrever este relatório; escreva à mão", passageira=False)
         if mensagem.stop_reason == "model_context_window_exceeded":
             raise MotorIndisponivel("os autos são grandes demais para uma só leitura; deixe no processo só os "
-                                    "arquivos que importam para esta manifestação")
+                                    "arquivos que importam para esta manifestação", passageira=False)
         if mensagem.stop_reason == "max_tokens":
             raise MotorIndisponivel("a resposta da IA ficou incompleta; tente de novo")
         escrito = "".join(b.text for b in mensagem.content if b.type == "text")

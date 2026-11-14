@@ -183,6 +183,11 @@ def test_paragrafo_sem_pagina_com_citacao_ou_com_pedido_sai_marcado():
     ("O Tema 1.234 do Supremo trata do assunto.", "citação"),
     ("A Lei nº 9.099/95 prevê a transação.", "citação"),
     ("O Superior Tribunal de Justiça já decidiu assim.", "citação"),
+    ("A Corte Superior fixou a tese no AgRg 123.", "citação"),
+    ("O MP requer a condenação.", "não é relatório"),
+    ("O órgão ministerial requer a condenação.", "não é relatório"),
+    ("Requeiro a designação de audiência.", "não é relatório"),
+    ("Por todo o exposto, a denúncia procede.", "não é relatório"),
 ])
 def test_formas_comuns_de_citacao_e_de_pedido_saem_marcadas(texto, marca):
     """Defeito achado na revisão: "pede", "isto posto", "Lei 11.343" e "Tema do Supremo" passavam sem marca."""
@@ -198,6 +203,7 @@ def test_formas_comuns_de_citacao_e_de_pedido_saem_marcadas(texto, marca):
     "A defesa requer a absolvição.",
     "O requerimento foi juntado aos autos.",
     "A vítima pede a devolução do objeto.",
+    "O laudo menciona precedente de outro caso da mesma vítima.",
 ])
 def test_pedido_de_outra_parte_e_fato_dos_autos_e_nao_e_marcado(texto):
     """Defeito achado na revisão: "requereu" e "requerimento" marcavam o relatório normal."""
@@ -221,6 +227,12 @@ def test_rotulo_do_arquivo_e_curto_sem_reticencias_e_distingue_nomes_iguais():
                 "pontos_a_enfrentar": []}
     (texto,) = [t for t in textos_de(escrever(resposta, DadosProcesso(NUMERO, autos=autos))) if t.startswith("Fato.")]
     assert texto == "Fato. (autos-eproc-evento12, p. 1; 2º arquivo, laudo, p. 1; 3º arquivo, laudo, p. 1)"
+    # mesmo começo de nome: fica o fim, que é o que distingue um arquivo do outro
+    eproc = (PaginaDosAutos("autos-eproc-0000102-evento12-DENUNCIA1.pdf", 1, "a", 1),
+             PaginaDosAutos("autos-eproc-0000102-evento12-LAUDO1.pdf", 1, "b", 2))
+    resposta["relatorio"][0]["fontes"] = [{"arquivo": n, "pagina": 1} for n in (1, 2)]
+    (texto,) = [t for t in textos_de(escrever(resposta, DadosProcesso(NUMERO, autos=eproc))) if t.startswith("Fato.")]
+    assert texto == "Fato. (evento12-DENUNCIA1, p. 1; 0000102-evento12-LAUDO1, p. 1)"
 
 
 def test_resposta_que_nao_termina_tem_teto_de_tempo(monkeypatch):
@@ -332,7 +344,9 @@ def test_modelo_so_da_lista_e_cliente_com_destino_e_chave_fixos(monkeypatch):
     motor = criar_motor("claude", "claude-haiku-5-5")
     assert motor.usa_autos and motor.modelo == "claude-haiku-5-5" and not criar_motor("demo").usa_autos
     assert str(motor._cliente.base_url).startswith(motor_claude.ENDERECO)
-    assert motor._cliente.max_retries == 1 and motor._cliente.timeout == motor_claude.TEMPO
+    assert motor._cliente.max_retries == 0 and motor._cliente.timeout == motor_claude.TEMPO
+    # as esperas somadas ficam abaixo do prazo depois do qual a escrita é dada como falha
+    assert 2 * motor_claude.TEMPO + motor_claude.TEMPO_TOTAL < servicos.PRAZO_DA_ESCRITA.total_seconds()
     assert logging.getLogger("anthropic").level == logging.WARNING           # em DEBUG, os autos iriam ao registro
     for fora in ("claude-fable-5-2", "qualquer-coisa"):
         with pytest.raises(RuntimeError, match="fora da lista"):

@@ -29,7 +29,7 @@
     {% if p.tarefa and p.tarefa.estado == 'falhou' %}
     <div class="aviso erro" id="resultado-escrita" role="status" tabindex="-1" {% if resultado_novo %}data-foco{% endif %}>
       <p>O relatório não foi escrito: {{ p.tarefa.erro }}. A minuta abaixo não mudou.</p>
-      {% if ia and p.autos and not minuta.editada and 'Avise' not in p.tarefa.erro %}
+      {% if ia and p.autos and not minuta.editada and p.tarefa.repetir %}
       <form method="post" action="/processos/{{ p.id }}/escrever">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn" type="submit">Tentar de novo</button>

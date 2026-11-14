@@ -10,7 +10,12 @@ FECHO = "[COMARCA], data da assinatura digital.\n\nPromotor(a) de Justiça"
 
 
 class MotorIndisponivel(Exception):
-    """O motor não conseguiu escrever. A mensagem é a orientação mostrada ao usuário."""
+    """O motor não conseguiu escrever. A mensagem é a orientação mostrada ao usuário.
+    `passageira` diz se adianta tentar de novo sem mudar nada."""
+
+    def __init__(self, mensagem: str, passageira: bool = True):
+        super().__init__(mensagem)
+        self.passageira = passageira
 
 
 @dataclass(frozen=True)

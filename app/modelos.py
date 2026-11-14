@@ -80,6 +80,7 @@ class TarefaMinuta(Base):
     pontos: Mapped[list] = mapped_column(JSON, default=list)       # pontos a enfrentar: lista de conferência na tela
     vista: Mapped[bool] = mapped_column(Boolean, default=False)    # o resultado já foi mostrado ao usuário
     chave: Mapped[str] = mapped_column(String(16), default="")     # distingue esta escrita de outra do mesmo processo
+    repetir: Mapped[bool] = mapped_column(Boolean, default=True)   # na falha: adianta tentar de novo sem mudar nada
     processo: Mapped[Processo] = relationship(back_populates="tarefa")
 
 

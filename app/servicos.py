@@ -145,6 +145,7 @@ def escrever_minuta(db: Session, processo_id: int, chave: str, motor: Motor) -> 
     """Roda fora da requisição: chama o motor com os autos e grava a minuta, ou o motivo da falha.
     Qualquer que seja o erro, a tarefa sai de "escrevendo". Resultado de escrita que já não vale é descartado."""
     estado, erro, m, blocos = "falhou", "a escrita falhou por um erro inesperado; tente de novo", None, None
+    repetir = True
     try:
         processo = _minha_escrita(db, processo_id, chave)
         if processo is None:
@@ -155,13 +156,13 @@ def escrever_minuta(db: Session, processo_id: int, chave: str, motor: Motor) -> 
         blocos = documento.normalizar(documento.folha(m))
         estado, erro = "pronta", ""
     except MotorIndisponivel as e:
-        erro = str(e)[:300]
+        erro, repetir = str(e)[:300], e.passageira
     except Exception as e:   # noqa: BLE001
         _registro.error("escrita da minuta falhou: %s", type(e).__name__)   # sem conteúdo dos autos
     for tentativa in range(3):
         try:
             db.rollback()
-            _fechar_escrita(db, processo_id, chave, estado, erro, m, blocos)
+            _fechar_escrita(db, processo_id, chave, estado, erro, m, blocos, repetir)
             return
         except Exception as e:   # noqa: BLE001 (banco ocupado: tenta de novo; se não der, o prazo da escrita resolve)
             _registro.error("não gravou o fim da escrita (tentativa %d): %s", tentativa + 1, type(e).__name__)
@@ -169,7 +170,7 @@ def escrever_minuta(db: Session, processo_id: int, chave: str, motor: Motor) -> 
 
 
 def _fechar_escrita(db: Session, processo_id: int, chave: str, estado: str, erro: str, m: dict | None,
-                    blocos) -> None:
+                    blocos, repetir: bool = True) -> None:
     processo = _minha_escrita(db, processo_id, chave)
     if processo is None:
         return   # a escrita venceu ou foi trocada por outra: este resultado não entra
@@ -180,7 +181,7 @@ def _fechar_escrita(db: Session, processo_id: int, chave: str, estado: str, erro
             db.flush()
         processo.minuta = Minuta(tipo=m["tipo"], blocos=blocos, motor=ORIGEM_IA)
         tarefa.pontos = [str(p) for p in m.get("pontos") or []]
-    tarefa.estado, tarefa.erro, tarefa.vista = estado, erro, False
+    tarefa.estado, tarefa.erro, tarefa.vista, tarefa.repetir = estado, erro, False, repetir
     for pedido in db.scalars(select(PedidoIA).where(PedidoIA.chave == chave, PedidoIA.resultado == "em curso")):
         pedido.resultado, pedido.modelo = estado, str((m or {}).get("modelo") or "")[:60]
     db.commit()
