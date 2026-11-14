@@ -3,6 +3,7 @@ e com teto de tempo e de memória; só o texto de cada página volta. O arquivo 
 
 O filho roda `_filho` em modo isolado (`python -I`), lê o PDF da entrada padrão e escreve o resultado em JSON."""
 import hashlib
+import hmac
 import io
 import json
 import re
@@ -59,8 +60,16 @@ def limpar(texto: str) -> str:
     return _CONTROLE.sub("", texto.encode("utf-8", "ignore").decode("utf-8")).strip()
 
 
-def impressao(dados: bytes) -> str:
+def resumo(dados: bytes) -> str:
+    """O sha256 do arquivo. Só vive na memória: o que se guarda é a `impressao`."""
     return hashlib.sha256(dados).hexdigest()
+
+
+def impressao(resumo_do_arquivo: str, chave: bytes, processo_id: int) -> str:
+    """Cartão C2: impressão que só o servidor refaz (HMAC com chave dele). Fora daqui não prova que alguém
+    teve um documento, porque sem a chave não dá para calcular a impressão de um arquivo conhecido. Leva o
+    processo: o mesmo arquivo em dois processos (ou de dois usuários) não fica com a mesma impressão."""
+    return hmac.new(chave, f"{processo_id}:{resumo_do_arquivo}".encode(), hashlib.sha256).hexdigest()
 
 
 @contextmanager
@@ -147,7 +156,7 @@ def ler(dados: bytes, tempo: float | None = None, exigir_limites: bool = False) 
     paginas = resultado.get("paginas")
     if not isinstance(paginas, list) or not paginas or not all(isinstance(p, str) for p in paginas):
         raise PdfRecusado("o arquivo está danificado ou não é um PDF")
-    return Leitura(impressao(dados), len(dados), paginas)
+    return Leitura(resumo(dados), len(dados), paginas)
 
 
 def limitar() -> bool:

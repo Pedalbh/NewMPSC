@@ -58,6 +58,19 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **O que espera:** a etapa 3.
 - **O que você faz:** o contato com o JuriBase.
 
+### C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos?
+- **Por que é sua:** prazo de guarda (LGPD). Veio do parecer de segurança do PR #8: o relatório da IA resume os autos, com a página de cada parágrafo, e fica depois que o texto dos autos é apagado (C1).
+- **Hoje:** a minuta fica para sempre, como trabalho do usuário. Os pontos a enfrentar, que a IA também tira dos autos, já saem junto com os autos.
+- **Opções**
+  - **A.** A minuta fica. É a peça do promotor, editada por ele.
+    - **Depois da decisão:** só o registro aqui.
+  - **B.** A minuta sai junto com os autos, 30 dias depois de concluído. O promotor precisa baixar o Word antes, se quiser guardar.
+    - **Depois da decisão:** a limpeza do C1 apaga também a minuta; a tela do processo concluído avisa; teste.
+  - **C.** A minuta fica, mas a parte escrita pela IA e não editada sai junto com os autos.
+    - **Depois da decisão:** marca, por bloco, o que o usuário editou; a limpeza apaga só o resto; teste e designer.
+- **Recomendo:** A. A minuta é a peça que o promotor assina, e ela já vai para o SIG; apagar aqui não tira o dado do mundo.
+- **O que espera:** nada agora. Precisa estar decidido antes de dado real.
+
 ## Decididos
 
 Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a executar" ou o que ainda falta.
@@ -69,8 +82,8 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | Merge | Com os revisores aprovando e o CI verde, o coordenador faz o merge sem perguntar | 13/11/2026 | nada a executar |
 | Onde vivem os cartões | Neste arquivo; o coordenador traz cada cartão aberto na conversa | 13/11/2026 | PR #4 |
 | Execução depois da decisão | A resposta ao cartão já é a ordem: o coordenador executa sem nova pergunta | 14/11/2026 | PR #6 |
-| C1 · Por quanto tempo o texto dos autos fica guardado | A: apaga sozinho o texto dos autos 30 dias depois de o processo ser concluído | 14/11/2026 | em construção, junto com o C2 |
-| C2 · A impressão digital do arquivo original continua guardada | B: impressão do arquivo com chave do servidor | 14/11/2026 | em construção, junto com o C1 |
+| C1 · Por quanto tempo o texto dos autos fica guardado | A: apaga sozinho o texto dos autos 30 dias depois de o processo ser concluído | 14/11/2026 | PR #8 |
+| C2 · A impressão digital do arquivo original continua guardada | B: impressão do arquivo com chave do servidor | 14/11/2026 | PR #8 |
 | C3 · Quanto texto de autos cada usuário pode guardar | A: números provisórios mantidos; revisão com autos reais | 14/11/2026 | nada a executar agora |
 | C4 · O que precisa existir antes de texto real ir para a API do Claude | A, com observação: etapa 2 só com dados fictícios; dado real barrado até o contrato; resumo para TI e encarregado | 14/11/2026 | resumo em `docs/RESUMO-C4.md`; a observação virou o C10 |
 | C5 · Qual fonte de legislação vigente a aplicação consulta | A: na etapa 3 só jurisprudência é conferida; citação de lei sai "não conferida" | 14/11/2026 | entra na etapa 3, com a avaliação de Planalto e LexML trazida em cartão |

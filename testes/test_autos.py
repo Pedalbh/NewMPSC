@@ -173,8 +173,11 @@ def test_enviar_pdf_guarda_o_texto_por_pagina(com_fila, banco):
     html = com_fila.get("/processos/1").text
     assert "autos.pdf: 3 páginas lidas." in html and "3 páginas</span>" in html
     arquivo = banco.scalar(select(ArquivoAutos))
-    assert (arquivo.nome, arquivo.total_paginas, arquivo.sem_texto, arquivo.tamanho) == ("autos.pdf", 3, 0, len(PDF))
-    assert arquivo.cita_processo and arquivo.caracteres == sum(len(p.texto) for p in arquivo.paginas)
+    assert (arquivo.nome, arquivo.total_paginas, arquivo.sem_texto) == ("autos.pdf", 3, 0)
+    exatos = sum(len(p.texto) for p in arquivo.paginas)
+    # cartão C2: nem o tamanho exato nem a contagem exata de caracteres ficam guardados
+    assert arquivo.tamanho == 0 and arquivo.caracteres % 1000 == 0 and exatos <= arquivo.caracteres < exatos + 1000
+    assert arquivo.cita_processo
     assert [p.numero for p in arquivo.paginas] == [1, 2, 3] and "resposta à acusação" in arquivo.paginas[2].texto
     # só o texto fica: nenhuma coluna guarda o arquivo original
     assert not any(c.type.python_type is bytes for t in (ArquivoAutos, PaginaAutos) for c in t.__table__.columns)

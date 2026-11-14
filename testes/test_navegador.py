@@ -166,10 +166,20 @@ def test_jornada_completa(endereco, pagina):
     pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
     pg.locator(".arquivos li").wait_for()
 
-    # concluir tira da fila
+    # concluir tira da fila; os autos de processo concluído somem em 30 dias, e a tela diz quando
+    endereco = pg.url.split("#")[0]
     pg.get_by_role("button", name="Marcar como concluído").click()
-    pg.get_by_text("Processo concluído.").wait_for()
+    pg.get_by_text("Processo concluído. A minuta fica; o texto dos autos será apagado em").wait_for()
     assert pg.locator(".fila .proc").count() == 8
+    pg.goto(endereco)
+    prazo = pg.get_by_text("A minuta fica. O texto destes autos será apagado em")
+    sync_api.expect(prazo).to_be_visible()
+    foto(pg, "5c-concluido")
+    pg.set_viewport_size({"width": 390, "height": 800})
+    sync_api.expect(prazo).to_be_visible()
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")   # sem rolagem lateral
+    foto(pg, "5c-celular-concluido")
+    pg.set_viewport_size({"width": 1360, "height": 900})
 
     # audiência com ficha
     pg.get_by_role("link", name="Audiências").click()

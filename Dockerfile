@@ -1,6 +1,6 @@
 # Imagem do servidor. Roda como usuário sem privilégio; o banco e o segredo vêm do ambiente.
 FROM python:3.12-slim
-ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 TZ=America/Sao_Paulo
 WORKDIR /srv
 COPY pyproject.toml ./
 COPY app ./app

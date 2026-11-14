@@ -10,8 +10,11 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    bindparam,
     create_engine,
     event,
+    inspect,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -47,6 +50,7 @@ class Processo(Base):
     dv_ok: Mapped[bool] = mapped_column(Boolean, default=True)
     grupo: Mapped[int] = mapped_column(Integer, default=3)
     situacao: Mapped[str] = mapped_column(String(20), default="a_fazer")  # a_fazer | concluido
+    concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # conta o prazo de guarda (C1)
     origem: Mapped[str] = mapped_column(String(20), default="planilha")  # planilha | colagem
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     minuta: Mapped["Minuta | None"] = relationship(back_populates="processo", cascade="all, delete-orphan",
@@ -100,15 +104,16 @@ class PedidoIA(Base):
 class ArquivoAutos(Base):
     """Um PDF dos autos enviado pelo usuário. Guarda-se o texto de cada página, não o arquivo."""
     __tablename__ = "arquivos_autos"
-    __table_args__ = (UniqueConstraint("processo_id", "sha256"),)
+    __table_args__ = (UniqueConstraint("processo_id", "impressao"),)
     id: Mapped[int] = mapped_column(primary_key=True)
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
     nome: Mapped[str] = mapped_column(String(200))
-    tamanho: Mapped[int] = mapped_column(Integer)
-    sha256: Mapped[str] = mapped_column(String(64))
+    tamanho: Mapped[int] = mapped_column(Integer, default=0)   # sempre 0 desde a 0.4.0 (cartão C2)
+    # Cartão C2: impressão com chave do servidor. Avisa arquivo repetido, mas não serve de prova fora daqui.
+    impressao: Mapped[str] = mapped_column(String(64))
     total_paginas: Mapped[int] = mapped_column(Integer)
     sem_texto: Mapped[int] = mapped_column(Integer, default=0)   # páginas digitalizadas ou ilegíveis
-    caracteres: Mapped[int] = mapped_column(Integer, default=0)  # texto guardado, para a cota do usuário
+    caracteres: Mapped[int] = mapped_column(Integer, default=0)  # para a cota; arredondado em milhares (C2)
     cita_processo: Mapped[bool] = mapped_column(Boolean, default=True)   # o número do processo aparece no texto
     enviado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     processo: Mapped[Processo] = relationship(back_populates="autos")
@@ -138,8 +143,9 @@ class Audiencia(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
-def criar_banco(url: str):
-    """Motor do banco e fábrica de sessões. SQLite em memória (testes) usa uma conexão só."""
+def criar_banco(url: str, chave_impressao: bytes | None = None):
+    """Motor do banco e fábrica de sessões. SQLite em memória (testes) usa uma conexão só.
+    `chave_impressao` só é exigida para converter um banco antigo, que ainda guarda o `sha256` do arquivo."""
     opcoes = {}
     if url.startswith("sqlite"):
         opcoes["connect_args"] = {"check_same_thread": False}
@@ -151,4 +157,34 @@ def criar_banco(url: str):
         def _apagar_de_verdade(conexao, _registro):
             conexao.execute("PRAGMA secure_delete=ON")   # texto removido não fica nas páginas livres do arquivo
     Base.metadata.create_all(motor)
+    _atualizar(motor, chave_impressao)
     return motor, sessionmaker(bind=motor, expire_on_commit=False)
+
+
+def _atualizar(motor, chave_impressao: bytes | None) -> None:
+    """Põe em dia um banco criado por versão anterior (enquanto não há Alembic)."""
+    from .autos import impressao  # aqui para não carregar a leitura de PDF junto com as tabelas
+    tabelas = inspect(motor).get_table_names()
+    antigas = {c["name"] for c in inspect(motor).get_columns("arquivos_autos")} \
+        if "arquivos_autos" in tabelas else set()
+    if "sha256" in antigas and "impressao" not in antigas and not chave_impressao:   # antes de mudar qualquer coisa
+        raise RuntimeError("banco antigo: a conversão das impressões dos autos precisa da chave do servidor")
+    with motor.begin() as conexao:
+        colunas = {c["name"] for c in inspect(conexao).get_columns("processos")} if "processos" in tabelas else set()
+        if colunas and "concluido_em" not in colunas:
+            tipo = DateTime().compile(dialect=motor.dialect)
+            conexao.execute(text(f"ALTER TABLE processos ADD COLUMN concluido_em {tipo}"))
+            # o prazo dos já concluídos começa a contar agora
+            conexao.execute(text("UPDATE processos SET concluido_em = :agora WHERE situacao = 'concluido'")
+                            .bindparams(bindparam("agora", type_=DateTime)), {"agora": datetime.now()})
+        colunas = {c["name"] for c in inspect(conexao).get_columns("arquivos_autos")} \
+            if "arquivos_autos" in tabelas else set()
+        if "sha256" in colunas and "impressao" not in colunas:
+            conexao.execute(text("ALTER TABLE arquivos_autos RENAME COLUMN sha256 TO impressao"))
+            linhas = conexao.execute(text("SELECT id, processo_id, impressao FROM arquivos_autos")).all()
+            for id_, processo_id, antigo in linhas:
+                conexao.execute(text("UPDATE arquivos_autos SET impressao = :i WHERE id = :id"),
+                                {"i": impressao(antigo, chave_impressao, processo_id), "id": id_})
+        if colunas:   # cartão C2: tamanho exato e caracteres exatos deixam de ficar (repetir não muda nada)
+            conexao.execute(text("UPDATE arquivos_autos SET tamanho = 0, "
+                                 "caracteres = ((caracteres + 999) / 1000) * 1000 WHERE tamanho <> 0"))

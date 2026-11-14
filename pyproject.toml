@@ -1,6 +1,6 @@
 [project]
 name = "newmpsc"
-version = "0.3.0"
+version = "0.4.0"
 description = "Aplicação web de trabalho do promotor: processos, minutas e audiências"
 requires-python = ">=3.12"
 dependencies = [

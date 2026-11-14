@@ -100,8 +100,13 @@
         </li>
         {% endfor %}
       </ul>
+      {% if apagar_em %}
+      <p class="fraco pequeno">A minuta fica. O texto destes autos será apagado em {{ apagar_em | data }}. Para manter, use Devolver à fila: nada é apagado e, se concluir de novo, o prazo recomeça.</p>
       {% endif %}
-      {% if escrevendo %}
+      {% endif %}
+      {% if p.situacao == 'concluido' %}
+      <p class="fraco pequeno">Para enviar autos, devolva o processo à fila.</p>
+      {% elif escrevendo %}
       <p class="fraco pequeno">O relatório está sendo escrito com estes autos. Para enviar ou remover arquivos, espere terminar.</p>
       {% else %}
       <form method="post" action="/processos/{{ p.id }}/autos" enctype="multipart/form-data">
@@ -142,7 +147,9 @@
       <p class="fraco pequeno">Envie os autos para pedir o relatório à IA, ou escreva direto na folha.</p>
       {% endif %}
       {% endif %}
+      {% if p.situacao != 'concluido' %}
       <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if not ia %} Por enquanto, a minuta ainda não usa os autos.{% endif %}</p>
+      {% endif %}
     </section>
 
     <section class="cartao">
