@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .autos import Leitura, limpar
+from .autos import Leitura, impressao, limpar
 from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, PedidoIA, Processo, TarefaMinuta, Usuario
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
@@ -28,6 +28,7 @@ ORIGEM_EM_BRANCO, ORIGEM_IA = "em branco", "IA, a conferir"
 _registro = logging.getLogger("newmpsc")
 _tranca_escrita = threading.Lock()   # um servidor só: pedidos simultâneos de escrita entram um de cada vez
 COTA_TEXTO_AUTOS = 200_000_000   # caracteres de autos guardados por usuário
+GUARDA_DEPOIS_DE_CONCLUIDO = timedelta(days=30)   # cartão C1: o texto dos autos some sozinho depois disso
 # o número como sai de um PDF: com ou sem máscara, com espaços ou quebra de linha no meio
 _CNJ_SOLTO = re.compile(r"(?<!\d)(\d{7})[\s.\-/]{0,3}(\d{2})[\s.\-/]{0,3}(\d{4})[\s.\-/]{0,3}(\d)[\s.\-/]{0,3}(\d{2})"
                         r"[\s.\-/]{0,3}(\d{4})(?!\d)")
@@ -291,11 +292,39 @@ def refazer_minuta(db: Session, processo: Processo, motor: Motor) -> None:
     db.commit()
 
 
-def definir_situacao(db: Session, processo: Processo, situacao: str) -> None:
+def definir_situacao(db: Session, processo: Processo, situacao: str, agora: datetime | None = None) -> None:
     if situacao not in ("a_fazer", "concluido"):
         raise ValueError("situação desconhecida")
+    if situacao == "concluido" and processo.situacao != "concluido":
+        processo.concluido_em = agora or datetime.now()
+    elif situacao == "a_fazer":
+        processo.concluido_em = None   # voltou à fila: o prazo de guarda zera
     processo.situacao = situacao
     db.commit()
+
+
+def autos_apagados_em(processo: Processo) -> datetime | None:
+    """Quando o texto dos autos deste processo será apagado (cartão C1); None se não está contando."""
+    if processo.situacao != "concluido" or processo.concluido_em is None:
+        return None
+    return processo.concluido_em + GUARDA_DEPOIS_DE_CONCLUIDO
+
+
+def apagar_autos_vencidos(db: Session, agora: datetime) -> int:
+    """Cartão C1: apaga o texto dos autos de processos concluídos há 30 dias ou mais, de todos os usuários.
+    A minuta fica: é trabalho do usuário. Devolve quantos arquivos foram apagados."""
+    vencidos = db.scalars(select(ArquivoAutos).join(Processo).where(
+        Processo.situacao == "concluido", Processo.concluido_em <= agora - GUARDA_DEPOIS_DE_CONCLUIDO)).all()
+    apagados = 0
+    for arquivo in vencidos:
+        if escrevendo(arquivo.processo):
+            continue
+        db.delete(arquivo)
+        apagados += 1
+    db.commit()
+    if apagados:
+        _registro.info("guarda dos autos: %d arquivo(s) apagado(s) por prazo", apagados)
+    return apagados
 
 
 class AutosRecusados(ValueError):
@@ -311,8 +340,8 @@ def nome_de_arquivo(nome: str | None) -> str:
     return limpar(nome or "")[:200] or "autos.pdf"
 
 
-def autos_repetidos(processo: Processo, sha256: str) -> bool:
-    return any(a.sha256 == sha256 for a in processo.autos)
+def autos_repetidos(processo: Processo, impressao: str) -> bool:
+    return any(a.impressao == impressao for a in processo.autos)
 
 
 def texto_guardado(db: Session, usuario_id: int) -> int:
@@ -321,13 +350,15 @@ def texto_guardado(db: Session, usuario_id: int) -> int:
     return db.scalar(soma)
 
 
-def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, ficticio: bool) -> ArquivoAutos:
+def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, ficticio: bool,
+                 chave_impressao: bytes) -> ArquivoAutos:
     """Guarda o texto de um PDF dos autos, página a página, no processo (que já é do usuário).
     Levanta `AutosRecusados` com a orientação."""
     nome = nome_de_arquivo(nome)
     if escrevendo(processo):
         raise AutosRecusados("o relatório está sendo escrito com os autos atuais; espere terminar")
-    if autos_repetidos(processo, leitura.sha256):
+    marca = impressao(leitura.sha256, chave_impressao)
+    if autos_repetidos(processo, marca):
         raise AutosRecusados("este arquivo já está nos autos")
     if len(processo.autos) >= MAX_ARQUIVOS_AUTOS:
         raise AutosRecusados(f"o processo já tem {MAX_ARQUIVOS_AUTOS} arquivos; remova algum antes")
@@ -337,7 +368,7 @@ def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, f
     # Limite 1 do projeto. É um alerta, não uma garantia: não enxerga página digitalizada, nome nem CPF.
     if ficticio and any(dv_ok(n) for n in numeros | numeros_no_texto(nome)):
         raise AutosRecusados("este servidor só aceita dados fictícios, e o arquivo traz número de processo real")
-    arquivo = ArquivoAutos(nome=nome, tamanho=leitura.tamanho, sha256=leitura.sha256,
+    arquivo = ArquivoAutos(nome=nome, tamanho=leitura.tamanho, impressao=marca,
                            total_paginas=len(leitura.paginas), sem_texto=leitura.sem_texto,
                            caracteres=leitura.caracteres,
                            cita_processo=processo.numero in numeros or leitura.sem_texto == len(leitura.paginas),

@@ -100,6 +100,9 @@
         </li>
         {% endfor %}
       </ul>
+      {% if apagar_em %}
+      <p class="fraco pequeno">O texto destes autos será apagado em {{ apagar_em | data }}. Se o processo voltar à fila, a contagem para.</p>
+      {% endif %}
       {% endif %}
       {% if escrevendo %}
       <p class="fraco pequeno">O relatório está sendo escrito com estes autos. Para enviar ou remover arquivos, espere terminar.</p>

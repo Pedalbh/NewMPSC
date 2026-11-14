@@ -1,7 +1,8 @@
 """Montagem da aplicação: sessão, cabeçalhos de segurança, rotas e telas."""
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -44,7 +45,7 @@ def _dia_extenso(d: datetime) -> str:
 def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_segundo_plano=None) -> FastAPI:
     """`motor` e `em_segundo_plano` existem para os testes: um motor de mentira e a escrita feita na hora."""
     config = config or carregar()
-    motor_banco, Sessao = criar_banco(config.banco_url)
+    motor_banco, Sessao = criar_banco(config.banco_url, config.chave_impressao)
     motor = motor or criar_motor(config.motor, config.modelo)
     if motor.usa_autos and not config.dados_ficticios:
         # Cartão C4. A trava vale aqui, onde o motor já está decidido, e não só na leitura do ambiente.
@@ -55,6 +56,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         max_workers=servicos.ESCRITAS_AO_MESMO_TEMPO, thread_name_prefix="minuta").submit
     with Sessao() as db:
         servicos.encerrar_escritas_interrompidas(db)
+        servicos.apagar_autos_vencidos(db, agora())
+    guarda = {"ultima": agora()}   # cartão C1: a limpeza roda na partida e depois no máximo uma vez por hora
 
     app = FastAPI(title="NewMPSC", version=VERSAO, docs_url=None, redoc_url=None, openapi_url=None)
     app.state.Sessao, app.state.config, app.state.limite, app.state.motor = Sessao, config, limite, motor
@@ -69,6 +72,9 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
 
     @app.middleware("http")
     async def cabecalhos(request: Request, call_next):
+        if agora() - guarda["ultima"] >= timedelta(hours=1):
+            guarda["ultima"] = agora()
+            await run_in_threadpool(_apagar_vencidos)
         recusa = _corpo_recusado(request)
         if recusa:
             resposta = telas.TemplateResponse(request, "erro.html", {"codigo": recusa[0], "mensagem": recusa[1]},
@@ -84,6 +90,13 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         if config.producao:
             resposta.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return resposta
+
+    def _apagar_vencidos() -> None:
+        try:
+            with Sessao() as db:
+                servicos.apagar_autos_vencidos(db, agora())
+        except Exception:   # a limpeza não derruba a requisição; tenta de novo na próxima hora
+            logging.getLogger("newmpsc").exception("guarda dos autos: a limpeza falhou")
 
     def _corpo_recusado(request: Request) -> tuple[int, str] | None:
         """Barra a requisição grande demais antes de ler o corpo."""
@@ -270,6 +283,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         # há quanto tempo escreve, contado no servidor: a tela não depende do fuso do navegador
         decorrido = int((datetime.now() - p.tarefa.iniciada_em).total_seconds()) if esperando else 0
         return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta,
+                    apagar_em=servicos.autos_apagados_em(p) if p.autos else None,
                     escrevendo=esperando, resultado_novo=resultado_novo, decorrido=max(decorrido, 0))
 
     def _paginas(n: int, lidas: bool = False) -> str:
@@ -279,11 +293,12 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         """Um arquivo: confere, lê fora da transação do banco e guarda com o nome inteiro. Devolve a frase do
         resultado (com o nome curto, porque o aviso viaja no cookie da sessão) e se há ressalva."""
         autos.conferir(dados)
-        if servicos.autos_repetidos(p, autos.impressao(dados)):
+        if servicos.autos_repetidos(p, autos.impressao(autos.resumo(dados), config.chave_impressao)):
             raise servicos.AutosRecusados("este arquivo já está nos autos")
         db.commit()   # devolve a conexão do banco enquanto o PDF é lido
         leitura = autos.ler(dados, tempo=prazo - time.monotonic(), exigir_limites=config.producao)
-        arquivo = servicos.juntar_autos(db, p, nome, leitura, config.dados_ficticios)
+        arquivo = servicos.juntar_autos(db, p, nome, leitura, config.dados_ficticios,
+                                         config.chave_impressao)
         frase = f"{curto}: {_paginas(arquivo.total_paginas, lidas=True)}"
         if arquivo.sem_texto == arquivo.total_paginas:
             frase += ", nenhuma com texto para ler (arquivo digitalizado)"
@@ -342,10 +357,15 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     async def situacao(request: Request, p=Depends(meu_processo), db=Depends(banco)):
         nova = str((await request.form()).get("situacao") or "")
         try:
-            servicos.definir_situacao(db, db.merge(p), nova)
+            p = db.merge(p)
+            servicos.definir_situacao(db, p, nova, agora())
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
-        avisar(request, "ok", "Processo concluído." if nova == "concluido" else "Processo devolvido à fila.")
+        if nova == "concluido":
+            avisar(request, "ok", "Processo concluído." + (" O texto dos autos será apagado em 30 dias." if p.autos
+                                                            else ""))
+        else:
+            avisar(request, "ok", "Processo devolvido à fila.")
         return voltar("/" if nova == "concluido" else f"/processos/{p.id}")
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])

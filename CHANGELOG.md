@@ -2,6 +2,16 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.4.0] - 2026-11-14
+
+### Adicionado
+- O texto dos autos é apagado sozinho 30 dias depois de o processo ser concluído (cartão C1). A minuta fica. Se o processo voltar à fila, a contagem para; numa nova conclusão, recomeça.
+- Ao concluir, o aviso diz que os autos serão apagados em 30 dias; a tela do processo concluído mostra a data.
+
+### Segurança
+- O banco não guarda mais o `sha256` do arquivo enviado (cartão C2). Fica uma impressão feita com chave do servidor: continua avisando arquivo repetido, mas fora do servidor não prova que alguém teve um documento.
+- Banco de versão anterior é convertido na partida. Trocar o segredo do servidor faz os arquivos já guardados deixarem de ser reconhecidos como repetidos.
+
 ## [0.3.0] - 2026-11-14
 
 ### Adicionado

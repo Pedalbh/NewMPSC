@@ -43,7 +43,8 @@ def semente(db, config, senha: str | None = None) -> str:
                             "1ª Promotoria de Justiça (fictícia)")
     servicos.importar_fila(db, usuario, FILA_FICTICIA.read_bytes(), FILA_FICTICIA.name, ConexaoPlanilha(), motor, True)
     primeiro = servicos.fila(db, usuario)[0]   # o PDF fictício é deste processo
-    servicos.juntar_autos(db, primeiro, AUTOS_FICTICIOS.name, autos.ler(AUTOS_FICTICIOS.read_bytes()), True)
+    servicos.juntar_autos(db, primeiro, AUTOS_FICTICIOS.name, autos.ler(AUTOS_FICTICIOS.read_bytes()), True,
+                          config.chave_impressao)
     base = datetime.now().replace(minute=0, second=0, microsecond=0)
     pauta = (("0000102-00.2026.8.24.0000", 1, 14, "Instrução e julgamento"),
              ("0000105-00.2026.8.24.0000", 1, 16, "Custódia"),
@@ -57,7 +58,7 @@ def semente(db, config, senha: str | None = None) -> str:
 def main(argv=None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     config = carregar()
-    _, Sessao = criar_banco(config.banco_url)
+    _, Sessao = criar_banco(config.banco_url, config.chave_impressao)
     with Sessao() as db:
         if argv[:1] == ["criar-usuario"] and len(argv) == 3:
             senha = getpass.getpass("Senha (12 caracteres ou mais): ")

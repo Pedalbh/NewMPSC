@@ -1,4 +1,6 @@
 """Configuração lida do ambiente (nenhum segredo no código)."""
+import hashlib
+import hmac
 import os
 import secrets
 from dataclasses import dataclass
@@ -18,6 +20,12 @@ class Config:
     @property
     def producao(self) -> bool:
         return self.ambiente == "producao"
+
+    @property
+    def chave_impressao(self) -> bytes:
+        """Chave das impressões dos autos (C2), derivada do segredo do servidor. Trocar o segredo faz os arquivos
+        já guardados deixarem de ser reconhecidos como repetidos."""
+        return hmac.new(self.segredo.encode(), b"newmpsc/impressao-dos-autos", hashlib.sha256).digest()
 
 
 def carregar(env=None) -> Config:
