@@ -1,5 +1,9 @@
 """Regras de trabalho: fila de processos, minutas e pauta. Toda consulta filtra pelo usuário."""
+import logging
 import re
+import secrets
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -8,15 +12,21 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .autos import Leitura, limpar
-from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, Processo, Usuario
+from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, PedidoIA, Processo, TarefaMinuta, Usuario
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
-from .portas import ConexaoPlanilha, DadosProcesso, Motor
+from .portas import ConexaoPlanilha, DadosProcesso, Motor, MotorIndisponivel, PaginaDosAutos, esqueleto
 
 CNJ = re.compile(r"(?<!\d)\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}(?!\d)")
 GRUPOS = ("Réu preso", "Vista urgente", "Intimação", "Outros")
 MAX_COLAGEM = 200
 MAX_ARQUIVOS_AUTOS = 30   # por processo
+ESCRITAS_POR_HORA, ESCRITAS_POR_DIA = 20, 60   # pedidos ao serviço de IA, por usuário
+ESCRITAS_AO_MESMO_TEMPO = 4                   # no servidor todo
+PRAZO_DA_ESCRITA = timedelta(minutes=15)      # depois disso a escrita é dada como falha
+ORIGEM_EM_BRANCO, ORIGEM_IA = "em branco", "IA, a conferir"
+_registro = logging.getLogger("newmpsc")
+_tranca_escrita = threading.Lock()   # um servidor só: pedidos simultâneos de escrita entram um de cada vez
 COTA_TEXTO_AUTOS = 200_000_000   # caracteres de autos guardados por usuário
 # o número como sai de um PDF: com ou sem máscara, com espaços ou quebra de linha no meio
 _CNJ_SOLTO = re.compile(r"(?<!\d)(\d{7})[\s.\-/]{0,3}(\d{2})[\s.\-/]{0,3}(\d{4})[\s.\-/]{0,3}(\d)[\s.\-/]{0,3}(\d{2})"
@@ -37,11 +47,163 @@ class ResultadoImportacao:
     conferir: list[str] = field(default_factory=list)
 
 
+def _dados(processo: Processo, com_autos: bool = False) -> DadosProcesso:
+    # objeto talvez ainda não gravado: os valores padrão das colunas só existem depois do flush
+    autos = tuple(PaginaDosAutos(a.nome, p.numero, p.texto, a.id) for a in processo.autos for p in a.paginas) \
+        if com_autos else ()
+    return DadosProcesso(processo.numero, processo.classe or "", processo.assunto or "", processo.vista or "",
+                         bool(processo.reu_preso), autos)
+
+
 def _criar_minuta(processo: Processo, motor: Motor) -> None:
-    # objeto ainda não gravado: os valores padrão das colunas só existem depois do flush
-    m = motor.elaborar_minuta(DadosProcesso(processo.numero, processo.classe or "", processo.assunto or "",
-                                            processo.vista or "", bool(processo.reu_preso)))
-    processo.minuta = Minuta(tipo=m["tipo"], blocos=documento.folha(m), motor=motor.nome)
+    """Primeira minuta do processo. O motor que precisa dos autos não é chamado aqui: fica a estrutura da peça,
+    e o usuário pede a escrita depois de enviar os autos."""
+    if motor.usa_autos:
+        m, nome = esqueleto(_dados(processo)), ORIGEM_EM_BRANCO
+    else:
+        m, nome = motor.elaborar_minuta(_dados(processo)), motor.nome
+    processo.minuta = Minuta(tipo=m["tipo"], blocos=documento.folha(m), motor=nome)
+
+
+class EscritaRecusada(ValueError):
+    """A mensagem é a orientação mostrada ao usuário."""
+
+
+def escrevendo(processo: Processo) -> bool:
+    return bool(processo.tarefa and processo.tarefa.estado == "escrevendo")
+
+
+def _vencer(db: Session, tarefa: TarefaMinuta) -> None:
+    tarefa.estado, tarefa.erro, tarefa.vista = "falhou", "a escrita demorou demais; peça de novo", False
+    for pedido in db.scalars(select(PedidoIA).where(PedidoIA.chave == tarefa.chave, PedidoIA.resultado == "em curso")):
+        pedido.resultado = "falhou"
+
+
+def conferir_escrita(db: Session, processo: Processo) -> None:
+    """Escrita que passou do prazo é dada como falha: nada fica preso em "escrevendo"."""
+    if escrevendo(processo) and datetime.now() - processo.tarefa.iniciada_em > PRAZO_DA_ESCRITA:
+        _vencer(db, processo.tarefa)
+        db.commit()
+
+
+def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
+                  confirmado: bool = False) -> TarefaMinuta:
+    """Marca que a minuta deste processo está sendo escrita pelo motor e registra o pedido.
+    Levanta `EscritaRecusada` com a orientação."""
+    if not motor.usa_autos:
+        raise EscritaRecusada("o motor em uso não escreve a partir dos autos")
+    # Limite 1 do projeto: em servidor de dados fictícios, processo com número real não vai ao serviço de IA.
+    if ficticio and dv_ok(processo.numero):
+        raise EscritaRecusada("este servidor só aceita dados fictícios, e o número deste processo é real")
+    if not any(p.texto for a in processo.autos for p in a.paginas):
+        raise EscritaRecusada("envie antes os autos em PDF, com texto para ler")
+    if processo.minuta and processo.minuta.editada and not confirmado:
+        raise EscritaRecusada("confirme que as suas alterações na minuta podem ser apagadas")
+    agora = datetime.now()
+    with _tranca_escrita:
+        for tarefa in db.scalars(select(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo",
+                                                             TarefaMinuta.iniciada_em < agora - PRAZO_DA_ESCRITA)):
+            _vencer(db, tarefa)
+        db.flush()
+        if escrevendo(processo):
+            raise EscritaRecusada("a minuta deste processo já está sendo escrita")
+        em_curso = select(func.count()).select_from(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo")
+        if db.scalar(em_curso.join(Processo).where(Processo.usuario_id == processo.usuario_id)):
+            raise EscritaRecusada("já há uma minuta sua sendo escrita; espere terminar")
+        if db.scalar(em_curso) >= ESCRITAS_AO_MESMO_TEMPO:
+            raise EscritaRecusada("o servidor está escrevendo outras minutas; tente de novo em instantes")
+        feitos = select(func.count()).select_from(PedidoIA).where(PedidoIA.usuario_id == processo.usuario_id)
+        if db.scalar(feitos.where(PedidoIA.feito_em > agora - timedelta(hours=1))) >= ESCRITAS_POR_HORA:
+            raise EscritaRecusada("você chegou ao limite de pedidos por hora; tente mais tarde")
+        if db.scalar(feitos.where(PedidoIA.feito_em > agora - timedelta(days=1))) >= ESCRITAS_POR_DIA:
+            raise EscritaRecusada("você chegou ao limite de pedidos por dia; tente amanhã")
+        if processo.tarefa:
+            db.delete(processo.tarefa)
+            db.flush()
+        chave = secrets.token_hex(8)
+        processo.tarefa = TarefaMinuta(chave=chave)
+        db.add(PedidoIA(usuario_id=processo.usuario_id, processo_id=processo.id, chave=chave))
+        try:
+            db.commit()
+        except IntegrityError:   # dois pedidos para o mesmo processo ao mesmo tempo, em servidores diferentes
+            db.rollback()
+            raise EscritaRecusada("a minuta deste processo já está sendo escrita") from None
+    return processo.tarefa
+
+
+def _minha_escrita(db: Session, processo_id: int, chave: str) -> Processo | None:
+    """O processo, se a escrita em curso nele ainda é a de `chave`. Lê do banco de novo: entre o pedido e a
+    resposta do motor a pessoa pode ter pedido outra escrita, ou o prazo pode ter vencido."""
+    db.expire_all()
+    processo = db.get(Processo, processo_id)
+    if processo is None or not escrevendo(processo) or processo.tarefa.chave != chave:
+        return None
+    return processo
+
+
+def escrever_minuta(db: Session, processo_id: int, chave: str, motor: Motor) -> None:
+    """Roda fora da requisição: chama o motor com os autos e grava a minuta, ou o motivo da falha.
+    Qualquer que seja o erro, a tarefa sai de "escrevendo". Resultado de escrita que já não vale é descartado."""
+    estado, erro, m, blocos = "falhou", "a escrita falhou por um erro inesperado; tente de novo", None, None
+    repetir = True
+    try:
+        processo = _minha_escrita(db, processo_id, chave)
+        if processo is None:
+            return
+        dados = _dados(processo, com_autos=True)
+        db.commit()   # devolve a conexão do banco enquanto o motor trabalha
+        m = motor.elaborar_minuta(dados)
+        blocos = documento.normalizar(documento.folha(m))
+        estado, erro = "pronta", ""
+    except MotorIndisponivel as e:
+        erro, repetir = str(e)[:300], e.passageira
+    except Exception as e:   # noqa: BLE001
+        _registro.error("escrita da minuta falhou: %s", type(e).__name__)   # sem conteúdo dos autos
+    for tentativa in range(3):
+        try:
+            db.rollback()
+            _fechar_escrita(db, processo_id, chave, estado, erro, m, blocos, repetir)
+            return
+        except Exception as e:   # noqa: BLE001 (banco ocupado: tenta de novo; se não der, o prazo da escrita resolve)
+            _registro.error("não gravou o fim da escrita (tentativa %d): %s", tentativa + 1, type(e).__name__)
+            time.sleep(0.5 * (tentativa + 1))
+
+
+def _fechar_escrita(db: Session, processo_id: int, chave: str, estado: str, erro: str, m: dict | None,
+                    blocos, repetir: bool = True) -> None:
+    processo = _minha_escrita(db, processo_id, chave)
+    if processo is None:
+        return   # a escrita venceu ou foi trocada por outra: este resultado não entra
+    tarefa = processo.tarefa
+    if estado == "pronta":
+        if processo.minuta:
+            db.delete(processo.minuta)
+            db.flush()
+        processo.minuta = Minuta(tipo=m["tipo"], blocos=blocos, motor=ORIGEM_IA)
+        tarefa.pontos = [str(p) for p in m.get("pontos") or []]
+    tarefa.estado, tarefa.erro, tarefa.vista, tarefa.repetir = estado, erro, False, repetir
+    for pedido in db.scalars(select(PedidoIA).where(PedidoIA.chave == chave, PedidoIA.resultado == "em curso")):
+        pedido.resultado, pedido.modelo = estado, str((m or {}).get("modelo") or "")[:60]
+    db.commit()
+
+
+def marcar_resultado_como_visto(db: Session, processo: Processo) -> bool:
+    """Diz se há resultado de escrita ainda não mostrado ao usuário, e marca como mostrado."""
+    tarefa = processo.tarefa
+    if tarefa is None or tarefa.estado == "escrevendo" or tarefa.vista:
+        return False
+    tarefa.vista = True
+    db.commit()
+    return True
+
+
+def encerrar_escritas_interrompidas(db: Session) -> None:
+    """Na partida do servidor: o que estava sendo escrito quando ele parou é marcado como falha."""
+    for tarefa in db.scalars(select(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo")):
+        tarefa.estado, tarefa.erro = "falhou", "o servidor reiniciou durante a escrita; peça de novo"
+    for pedido in db.scalars(select(PedidoIA).where(PedidoIA.resultado == "em curso")):
+        pedido.resultado = "falhou"
+    db.commit()
 
 
 def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None, conexao: ConexaoPlanilha,
@@ -106,7 +268,11 @@ def processo_do_usuario(db: Session, usuario: Usuario, processo_id: int) -> Proc
 
 
 def salvar_minuta(db: Session, processo: Processo, blocos) -> Minuta:
+    if escrevendo(processo):
+        raise ValueError("a minuta está sendo escrita; espere terminar")
     processo.minuta.blocos = documento.normalizar(blocos)
+    if processo.tarefa and processo.tarefa.estado == "falhou":
+        db.delete(processo.tarefa)   # a pessoa seguiu à mão: o aviso da falha não fica para sempre
     processo.minuta.editada = True
     processo.minuta.atualizada_em = datetime.now()
     db.commit()
@@ -114,6 +280,10 @@ def salvar_minuta(db: Session, processo: Processo, blocos) -> Minuta:
 
 
 def refazer_minuta(db: Session, processo: Processo, motor: Motor) -> None:
+    if escrevendo(processo):
+        raise ValueError("a minuta está sendo escrita; espere terminar")
+    if processo.tarefa:
+        db.delete(processo.tarefa)
     if processo.minuta:
         db.delete(processo.minuta)
         db.flush()
@@ -155,6 +325,8 @@ def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, f
     """Guarda o texto de um PDF dos autos, página a página, no processo (que já é do usuário).
     Levanta `AutosRecusados` com a orientação."""
     nome = nome_de_arquivo(nome)
+    if escrevendo(processo):
+        raise AutosRecusados("o relatório está sendo escrito com os autos atuais; espere terminar")
     if autos_repetidos(processo, leitura.sha256):
         raise AutosRecusados("este arquivo já está nos autos")
     if len(processo.autos) >= MAX_ARQUIVOS_AUTOS:
@@ -180,6 +352,8 @@ def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, f
 
 
 def remover_autos(db: Session, processo: Processo, arquivo_id: int) -> bool:
+    if escrevendo(processo):
+        raise AutosRecusados("o relatório está sendo escrito com os autos atuais; espere terminar")
     arquivo = next((a for a in processo.autos if a.id == arquivo_id), None)
     if arquivo is None:
         return False

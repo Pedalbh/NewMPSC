@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block titulo %}{{ p.numero }} · NewMPSC{% endblock %}
 {% block conteudo %}
+{% set de_ia = minuta.motor == origem_ia %}
 <nav class="trilha" aria-label="Você está em"><a class="elo" href="/">‹ Processos</a></nav>
 <section class="cabecalho-proc">
   <div>
@@ -16,21 +17,57 @@
 </section>
 
 <div class="grade">
-  <section class="principal" aria-label="Minuta">
+  <section class="principal pilha" aria-label="Minuta">
+    {% if escrevendo %}
+    <div class="cartao espera" id="escrevendo" data-acompanhar="/api/processos/{{ p.id }}/escrita" data-decorrido="{{ decorrido }}">
+      <p class="vazio-titulo">Escrevendo o relatório a partir dos autos…</p>
+      <div class="barra" aria-hidden="true"><span></span></div>
+      <p class="fraco" id="espera-texto" role="status" aria-live="polite">Costuma levar de um a três minutos. Pode sair desta tela; o relatório fica aqui quando terminar.</p>
+      <noscript><a class="btn" href="/processos/{{ p.id }}">Atualizar</a></noscript>
+    </div>
+    {% else %}
+    {% if p.tarefa and p.tarefa.estado == 'falhou' %}
+    <div class="aviso erro" id="resultado-escrita" role="status" tabindex="-1" {% if resultado_novo %}data-foco{% endif %}>
+      <p>O relatório não foi escrito: {{ p.tarefa.erro }}. A minuta abaixo não mudou.</p>
+      {% if ia and p.autos and not minuta.editada and p.tarefa.repetir %}
+      <form method="post" action="/processos/{{ p.id }}/escrever">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn" type="submit">Tentar de novo</button>
+      </form>
+      {% endif %}
+    </div>
+    {% elif de_ia %}
+    <div class="aviso atencao" id="resultado-escrita" role="status" tabindex="-1" {% if resultado_novo %}data-foco{% endif %}>
+      <p>{% if resultado_novo %}Relatório pronto. {% endif %}O relatório foi escrito por IA a partir dos autos.</p>
+      <p>Confira cada página citada e complete os trechos entre colchetes. A fundamentação e o pedido são seus.</p>
+    </div>
+    {% endif %}
     <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" aria-label="Texto da minuta, editável">
       {% for b in minuta.blocos %}<p class="b b-{{ b.estilo }}" data-estilo="{{ b.estilo }}" contenteditable="true" spellcheck="true">{{ b.texto }}</p>{% endfor %}
     </div>
+    {% endif %}
   </section>
 
   <aside class="lateral pilha-cartoes fixo" aria-label="Ações">
     <section class="cartao">
       <div class="linha">
         <h2>Minuta</h2>
-        <span class="selo empurra" id="estado-salvar" role="status" aria-live="polite">{{ 'Salva às ' ~ (minuta.atualizada_em | hora) if minuta.editada else 'Sem alterações' }}</span>
+        {% if not escrevendo %}<span class="selo empurra" id="estado-salvar" role="status" aria-live="polite">{{ 'Salva às ' ~ (minuta.atualizada_em | hora) if minuta.editada else 'Sem alterações' }}</span>{% endif %}
       </div>
-      <a class="btn principal largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
+      {% if escrevendo %}
+      <p class="fraco">Aguarde o relatório para baixar ou copiar.</p>
+      {% else %}
+      <a class="btn {{ 'principal' if not (ia and minuta.motor == origem_em_branco) }} largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
       <button class="btn largo" type="button" id="copiar" data-origem="/processos/{{ p.id }}/minuta.txt">Copiar texto</button>
       <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
+      {% if p.tarefa and p.tarefa.estado == 'pronta' and p.tarefa.pontos and de_ia %}
+      <h3>Pontos a enfrentar</h3>
+      <ul class="lista pequeno" id="pontos">
+        {% for ponto in p.tarefa.pontos %}<li>{{ ponto }}</li>{% endfor %}
+      </ul>
+      <p class="fraco pequeno">Sugeridos pela IA a partir dos autos. Ficam só aqui; não entram no arquivo.</p>
+      {% endif %}
+      {% endif %}
     </section>
 
     <section class="cartao" id="autos">
@@ -54,14 +91,19 @@
             </span>
             {% endif %}
           </div>
+          {% if not escrevendo %}
           <form method="post" action="/processos/{{ p.id }}/autos/{{ a.id }}/remover">
             <input type="hidden" name="csrf" value="{{ csrf }}">
             <button class="btn discreto" type="submit" aria-label="Remover {{ a.nome }}">Remover</button>
           </form>
+          {% endif %}
         </li>
         {% endfor %}
       </ul>
       {% endif %}
+      {% if escrevendo %}
+      <p class="fraco pequeno">O relatório está sendo escrito com estes autos. Para enviar ou remover arquivos, espere terminar.</p>
+      {% else %}
       <form method="post" action="/processos/{{ p.id }}/autos" enctype="multipart/form-data">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <label class="soltar" data-enviando="Lendo o arquivo…" data-espera="isso pode levar até um minuto">
@@ -71,7 +113,36 @@
         </label>
         <noscript><button class="btn largo" type="submit">Enviar PDF</button></noscript>
       </form>
-      <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if config.motor == 'demo' %} Por enquanto, a minuta ainda não usa os autos.{% endif %}</p>
+      {% if ia and p.autos %}
+      {% if minuta.editada and not de_ia %}
+      <form method="post" action="/processos/{{ p.id }}/escrever">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="confirmo" value="1">
+        <button class="btn principal largo" type="submit">Escrever o relatório</button>
+      </form>
+      <p class="fraco pequeno">O que você escreveu na folha será substituído pelo relatório.</p>
+      {% elif minuta.editada %}
+      <details>
+        <summary>Escrever o relatório de novo</summary>
+        <form method="post" action="/processos/{{ p.id }}/escrever" class="pilha">
+          <input type="hidden" name="csrf" value="{{ csrf }}">
+          <input type="hidden" name="confirmo" value="1">
+          <p class="fraco pequeno">O texto atual da minuta, com as suas alterações, será apagado e trocado pelo relatório novo.</p>
+          <button class="btn perigo" type="submit">Apagar minhas alterações e escrever</button>
+        </form>
+      </details>
+      {% else %}
+      <form method="post" action="/processos/{{ p.id }}/escrever">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn {{ 'principal' if not de_ia }} largo" type="submit">{{ 'Escrever de novo' if de_ia else 'Escrever o relatório' }}</button>
+      </form>
+      {% endif %}
+      <p class="fraco pequeno">A IA lê os autos enviados e escreve o relatório. O texto dos autos vai ao serviço de IA.</p>
+      {% elif ia %}
+      <p class="fraco pequeno">Envie os autos para pedir o relatório à IA, ou escreva direto na folha.</p>
+      {% endif %}
+      {% endif %}
+      <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if not ia %} Por enquanto, a minuta ainda não usa os autos.{% endif %}</p>
     </section>
 
     <section class="cartao">
@@ -80,7 +151,7 @@
         <div><dt>Entrada</dt><dd>{{ p.entrada | data }} {{ p.entrada | hora }}</dd></div>
         <div><dt>Nº SIG</dt><dd>{{ p.numero_sig or '—' }}</dd></div>
         <div><dt>Prioridade</dt><dd>{{ grupos[p.grupo] }}</dd></div>
-        <div><dt>Motor</dt><dd>{{ minuta.motor }}</dd></div>
+        <div><dt>Origem da minuta</dt><dd>{{ 'Relatório por IA, a conferir' if de_ia else 'Em branco' if minuta.motor == origem_em_branco else 'Demonstração' }}</dd></div>
       </dl>
       <form method="post" action="/processos/{{ p.id }}/situacao">
         <input type="hidden" name="csrf" value="{{ csrf }}">
@@ -92,14 +163,16 @@
         <button class="btn largo" type="submit">Devolver à fila</button>
         {% endif %}
       </form>
+      {% if not escrevendo %}
       <details>
-        <summary>Refazer a minuta do zero</summary>
+        <summary>{{ 'Voltar à minuta em branco' if ia else 'Refazer a minuta do zero' }}</summary>
         <form method="post" action="/processos/{{ p.id }}/refazer" class="pilha">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <p class="fraco pequeno">O texto atual, com as suas alterações, é substituído.</p>
-          <button class="btn perigo" type="submit">Refazer</button>
+          <button class="btn perigo" type="submit">{{ 'Apagar e voltar ao branco' if ia else 'Refazer' }}</button>
         </form>
       </details>
+      {% endif %}
     </section>
   </aside>
 </div>

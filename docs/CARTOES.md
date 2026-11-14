@@ -36,7 +36,7 @@ Como responder: diga na conversa o número do cartão e a opção (por exemplo, 
 
 ### C4 · Contrato e base legal antes de texto real ir para a API do Claude
 - **Por que é sua:** destino novo de dado, fora do MPSC e fora do país, e contrato.
-- **Contexto:** a etapa 2 liga a aplicação à API do Claude, direta (decisão sua de 13/11/2026). O processamento é nos Estados Unidos, salvo contrato com outra região. O parecer de segurança marcou como CONFERIR, em fonte oficial: enquadramento na LGPD, regime de transferência internacional e normas do CNMP e do MPSC.
+- **Contexto:** a etapa 2 liga a aplicação à API do Claude, direta (decisão sua de 13/11/2026). A aplicação pede que o processamento seja nos Estados Unidos (sem esse pedido, o padrão do serviço é qualquer região). O parecer de segurança marcou como CONFERIR, em fonte oficial: enquadramento na LGPD (art. 4º, III, "d", e art. 33), a Resolução CD/ANPD nº 19/2024 sobre transferência internacional, as normas do CNMP e do MPSC sobre uso de IA, e o prazo de retenção do lado da Anthropic. Segundo a documentação da Anthropic, conteúdo retido não treina modelo sem permissão, e a retenção zero é um acordo comercial, não uma opção de painel.
 - **Opções**
   - **A.** A etapa 2 é construída e testada só com dados fictícios. Dado real fica barrado até haver contrato institucional e parecer do encarregado de dados do MPSC. Em paralelo, o coordenador prepara um resumo de uma página para você levar à área de TI e ao encarregado.
   - **B.** Igual a A, sem o resumo: você conduz a conversa institucional por conta própria.
@@ -62,6 +62,36 @@ Como responder: diga na conversa o número do cartão e a opção (por exemplo, 
   - **B.** O coordenador levanta o que estiver publicado e traz um cartão novo com as condições e o custo.
 - **Recomendo:** B.
 - **O que espera:** a etapa 3.
+
+### C7 · O que o motor de IA escreve antes de existir a verificação de fontes
+- **Por que é sua:** conteúdo jurídico (limite 5 do `CLAUDE.md`).
+- **Hoje (como a etapa 2 foi construída):** o motor escreve só o relatório dos fatos, com a página de cada parágrafo, e a lista de pontos a enfrentar. Fundamentação e pedido ficam em branco, marcados para você.
+- **Opções**
+  - **A.** Manter assim até a verificação de fontes (etapa 3) existir.
+  - **B.** Deixar o motor rascunhar também a fundamentação, com toda citação de lei e de julgado marcada como "não conferida". Exige mudar o limite 5.
+- **Recomendo:** A. É o que o limite 5 já manda, e o relatório é a parte que mais poupa leitura.
+- **O que espera:** nada. A etapa 2 já segue a opção A.
+
+### C8 · Qual modelo o motor usa, e o teto de gasto
+- **Por que é sua:** dinheiro.
+- **Hoje:** `claude-opus-5-5`, o padrão recomendado pela Anthropic. Preço de tabela em 03/11/2026: US$ 4 por milhão de tokens de entrada e US$ 20 por milhão de saída. Estimativa minha, sem medição: autos de 500 páginas dão algo como 400 mil tokens de entrada, perto de US$ 2 por relatório; autos de 50 páginas, perto de US$ 0,20. Limites atuais por usuário: 20 pedidos por hora e 60 por dia. No pior caso (autos no tamanho máximo), o parecer de segurança calculou cerca de US$ 2,70 por pedido.
+- **Opções**
+  - **A.** Manter o modelo padrão e medir o custo real nos primeiros testes com dados fictícios, antes de fixar um teto.
+  - **B.** Trocar já por um modelo mais barato (`claude-sonnet-5-5`, metade do preço), aceitando relatório possivelmente pior.
+  - **C.** Fixar agora um teto mensal em dólares.
+- **Recomendo:** A.
+- **O que espera:** o primeiro teste com a API de verdade, que também depende de uma chave da API (você cria a chave; eu peço por formulário seguro, nunca na conversa).
+
+### C9 · O que fazer quando o modelo de IA declina um pedido, e onde ele processa
+- **Por que é sua:** destino do dado (qual modelo e em que região o texto é processado) e custo.
+- **Contexto:** a API da Anthropic oferece passar o pedido a outro modelo quando o primeiro declina. A rota dessa troca não é publicada por modelo, e o parecer de segurança não conseguiu confirmar se ela é compatível com retenção zero. Sobre a região: restringir aos Estados Unidos custa 10% a mais; o padrão do serviço é qualquer região.
+- **Hoje (como a etapa 2 foi construída):** sem troca de modelo (se o modelo declina, a tela avisa e você escreve à mão) e processamento pedido para os Estados Unidos.
+- **Opções**
+  - **A.** Manter assim.
+  - **B.** Ligar a troca de modelo, só para uma lista de modelos que você aprovar.
+  - **C.** Deixar o processamento em qualquer região, 10% mais barato.
+- **Recomendo:** A, até haver contrato e a questão da retenção estar conferida.
+- **O que espera:** nada.
 
 ## Decididos
 

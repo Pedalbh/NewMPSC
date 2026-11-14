@@ -1,5 +1,6 @@
 """Montagem da aplicação: sessão, cabeçalhos de segurança, rotas e telas."""
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -16,7 +17,7 @@ from . import VERSAO, autos, servicos
 from .config import Config, carregar
 from .modelos import Usuario, criar_banco
 from .nucleo import documento
-from .portas import ConexaoPlanilha, criar_motor
+from .portas import ConexaoPlanilha, MotorIndisponivel, criar_motor
 from .seguranca import LimiteTentativas, conferir_senha, csrf_confere, token_csrf
 
 AQUI = Path(__file__).parent
@@ -40,21 +41,31 @@ def _dia_extenso(d: datetime) -> str:
     return f"{DIAS[d.weekday()]}, {d.day} de {MESES[d.month - 1]}"
 
 
-def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
+def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_segundo_plano=None) -> FastAPI:
+    """`motor` e `em_segundo_plano` existem para os testes: um motor de mentira e a escrita feita na hora."""
     config = config or carregar()
     motor_banco, Sessao = criar_banco(config.banco_url)
-    motor = criar_motor(config.motor)
+    motor = motor or criar_motor(config.motor, config.modelo)
+    if motor.usa_autos and not config.dados_ficticios:
+        # Cartão C4. A trava vale aqui, onde o motor já está decidido, e não só na leitura do ambiente.
+        raise RuntimeError("motor de IA só com dados fictícios: dado real depende de contrato institucional")
     conexao = ConexaoPlanilha()
     limite = LimiteTentativas()
+    em_segundo_plano = em_segundo_plano or ThreadPoolExecutor(
+        max_workers=servicos.ESCRITAS_AO_MESMO_TEMPO, thread_name_prefix="minuta").submit
+    with Sessao() as db:
+        servicos.encerrar_escritas_interrompidas(db)
 
     app = FastAPI(title="NewMPSC", version=VERSAO, docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.Sessao, app.state.config, app.state.limite = Sessao, config, limite
+    app.state.Sessao, app.state.config, app.state.limite, app.state.motor = Sessao, config, limite, motor
     app.mount("/static", StaticFiles(directory=AQUI / "static"), name="static")
     telas = Jinja2Templates(directory=AQUI / "templates")
     telas.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else "—"
     telas.env.filters["hora"] = lambda d: d.strftime("%H:%M") if d else ""
     telas.env.filters["dia_extenso"] = _dia_extenso
-    telas.env.globals.update(versao=VERSAO, grupos=servicos.GRUPOS, config=config)
+    # só o que as telas precisam saber do motor; o objeto (com o cliente e a chave) não vai para os modelos de tela
+    telas.env.globals.update(versao=VERSAO, grupos=servicos.GRUPOS, config=config, ia=motor.usa_autos,
+                             origem_ia=servicos.ORIGEM_IA, origem_em_branco=servicos.ORIGEM_EM_BRANCO)
 
     @app.middleware("http")
     async def cabecalhos(request: Request, call_next):
@@ -244,14 +255,22 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
             return
         partes = []
         if res.novos:
-            partes.append(f"{res.novos} processo(s) novo(s), com a primeira minuta pronta")
+            partes.append(f"{res.novos} processo(s) novo(s), " + ("prontos para receber os autos" if motor.usa_autos
+                                                                   else "com a primeira minuta pronta"))
         if res.atualizados:
             partes.append(f"{res.atualizados} já estava(m) na fila")
         avisar(request, "atencao" if res.conferir else "ok", ["; ".join(partes) + "."] + res.conferir)
 
     @app.get("/processos/{processo_id}", response_class=HTMLResponse)
-    def processo(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual)):
-        return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta)
+    def processo(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
+        p = db.merge(p)
+        servicos.conferir_escrita(db, p)
+        resultado_novo = servicos.marcar_resultado_como_visto(db, p)
+        esperando = servicos.escrevendo(p)
+        # há quanto tempo escreve, contado no servidor: a tela não depende do fuso do navegador
+        decorrido = int((datetime.now() - p.tarefa.iniciada_em).total_seconds()) if esperando else 0
+        return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta,
+                    escrevendo=esperando, resultado_novo=resultado_novo, decorrido=max(decorrido, 0))
 
     def _paginas(n: int, lidas: bool = False) -> str:
         return f"1 página{' lida' if lidas else ''}" if n == 1 else f"{n} páginas{' lidas' if lidas else ''}"
@@ -311,8 +330,11 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
 
     @app.post("/processos/{processo_id}/autos/{arquivo_id}/remover", dependencies=[Depends(exigir_csrf)])
     def remover_autos(request: Request, arquivo_id: int, p=Depends(meu_processo), db=Depends(banco)):
-        if not servicos.remover_autos(db, db.merge(p), arquivo_id):
-            raise HTTPException(404, "Arquivo não encontrado.")
+        try:
+            if not servicos.remover_autos(db, db.merge(p), arquivo_id):
+                raise HTTPException(404, "Arquivo não encontrado.")
+        except servicos.AutosRecusados as e:
+            raise HTTPException(409, str(e).capitalize() + ".") from None
         avisar(request, "ok", "Arquivo removido dos autos.", "autos")
         return voltar(f"/processos/{p.id}#resultado-autos")
 
@@ -328,9 +350,36 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])
     def refazer(request: Request, p=Depends(meu_processo), db=Depends(banco)):
-        servicos.refazer_minuta(db, db.merge(p), motor)
-        avisar(request, "ok", "Minuta refeita pelo motor.")
+        try:
+            servicos.refazer_minuta(db, db.merge(p), motor)
+        except ValueError as e:
+            raise HTTPException(409, str(e).capitalize() + ".") from None
+        avisar(request, "ok", "Minuta em branco de novo." if motor.usa_autos
+               else "Minuta refeita pelo motor.")
         return voltar(f"/processos/{p.id}")
+
+    def _escrever(processo_id: int, chave: str) -> None:
+        with Sessao() as db:
+            servicos.escrever_minuta(db, processo_id, chave, motor)
+
+    @app.post("/processos/{processo_id}/escrever", dependencies=[Depends(exigir_csrf)])
+    async def escrever(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+        """Pede ao motor de IA o relatório a partir dos autos. A escrita roda fora da requisição."""
+        confirmado = (await request.form()).get("confirmo") == "1"
+        try:   # fora do laço de eventos: o pedido espera uma tranca e o banco
+            tarefa = await run_in_threadpool(servicos.pedir_escrita, db, db.merge(p), motor, config.dados_ficticios,
+                                             confirmado)
+        except servicos.EscritaRecusada as e:
+            avisar(request, "erro", f"O relatório não foi pedido: {e}.")
+            return voltar(f"/processos/{p.id}")
+        em_segundo_plano(_escrever, p.id, tarefa.chave)
+        return voltar(f"/processos/{p.id}")
+
+    @app.get("/api/processos/{processo_id}/escrita")
+    def escrita(p=Depends(meu_processo), db=Depends(banco)):
+        p = db.merge(p)
+        servicos.conferir_escrita(db, p)
+        return {"estado": p.tarefa.estado if p.tarefa else "nenhuma"}
 
     @app.put("/api/processos/{processo_id}/minuta", dependencies=[Depends(exigir_csrf)])
     async def salvar(request: Request, p=Depends(meu_processo), db=Depends(banco)):
@@ -341,17 +390,23 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
             raise HTTPException(422, str(e)) from None
         return {"salva_em": m.atualizada_em.strftime("%H:%M"), "paragrafos": len(m.blocos)}
 
+    def _sem_escrita_em_curso(p) -> None:
+        if servicos.escrevendo(p):
+            raise HTTPException(409, "O relatório está sendo escrito. Espere terminar para baixar a minuta.")
+
     def _nome_arquivo(p, extensao: str) -> str:
         return quote(f"minuta-{p.numero}.{extensao}")
 
     @app.get("/processos/{processo_id}/minuta.docx")
     def baixar_docx(p=Depends(meu_processo)):
+        _sem_escrita_em_curso(p)
         return Response(documento.docx(p.minuta.blocos), headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{_nome_arquivo(p, 'docx')}"},
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
     @app.get("/processos/{processo_id}/minuta.txt")
     def baixar_texto(p=Depends(meu_processo)):
+        _sem_escrita_em_curso(p)
         return PlainTextResponse(documento.texto_simples(p.minuta.blocos))
 
     # ------------------------------------------------------------------ audiências
@@ -370,10 +425,11 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
         try:
             a = servicos.marcar_audiencia(db, usuario, str(d.get("numero") or ""), str(d.get("data") or ""),
                                           str(d.get("hora") or ""), str(d.get("tipo") or ""), motor)
-        except ValueError as e:
+        except (ValueError, MotorIndisponivel) as e:
             avisar(request, "erro", str(e).capitalize() + ".")
             return voltar("/audiencias")
-        avisar(request, "ok", f"Audiência marcada para {a.inicio:%d/%m} às {a.inicio:%H:%M}, com a ficha pronta.")
+        avisar(request, "ok", f"Audiência marcada para {a.inicio:%d/%m} às {a.inicio:%H:%M}, " +
+               ("com a ficha em branco para preencher." if motor.usa_autos else "com a ficha pronta."))
         return voltar("/audiencias")
 
     @app.get("/audiencias/{audiencia_id}", response_class=HTMLResponse)

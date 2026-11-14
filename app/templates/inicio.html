@@ -41,7 +41,11 @@
             {% if p.reu_preso %}<span class="selo erro">Réu preso</span>{% endif %}
             {% if p.vista | lower == 'urgente' %}<span class="selo atencao">Urgente</span>{% endif %}
             {% if not p.dv_ok and not config.dados_ficticios %}<span class="selo atencao">Conferir número</span>{% endif %}
-            {% if p.minuta and p.minuta.editada %}<span class="selo andamento">Em edição</span>
+            {% if p.tarefa and p.tarefa.estado == 'escrevendo' %}<span class="selo andamento">Escrevendo…</span>
+            {% elif p.tarefa and p.tarefa.estado == 'falhou' %}<span class="selo erro">Relatório falhou</span>
+            {% elif p.minuta and p.minuta.editada %}<span class="selo andamento">Em edição</span>
+            {% elif p.minuta and p.minuta.motor == origem_ia %}<span class="selo ok">Relatório pronto</span>
+            {% elif p.minuta and p.minuta.motor == origem_em_branco %}<span class="selo">{{ 'Peça o relatório' if p.autos else 'Envie os autos' }}</span>
             {% elif p.minuta %}<span class="selo ok">Minuta pronta</span>{% endif %}
           </span>
           <span class="proc-data fraco">{{ p.entrada | data }}</span>
@@ -54,7 +58,7 @@
     <div class="vazio">
       {% if ver == 'a_fazer' %}
       <p class="vazio-titulo">Sua mesa está limpa</p>
-      <p class="fraco">Traga a planilha exportada do SIG e cada processo chega aqui com a primeira minuta pronta.</p>
+      <p class="fraco">Traga a planilha exportada do SIG e cada processo chega aqui {{ 'pronto para receber os autos' if ia else 'com a primeira minuta pronta' }}.</p>
       {% else %}
       <p class="fraco">Nenhum processo concluído ainda.</p>
       {% endif %}

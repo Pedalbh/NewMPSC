@@ -1,6 +1,6 @@
 [project]
 name = "newmpsc"
-version = "0.2.0"
+version = "0.3.0"
 description = "Aplicação web de trabalho do promotor: processos, minutas e audiências"
 requires-python = ">=3.12"
 dependencies = [
@@ -14,6 +14,8 @@ dependencies = [
   "python-multipart==0.0.33",
   "xlrd==2.0.2",
   "pypdf==7.1.0",
+  "anthropic==2.8.0",
+  "opentelemetry-api==1.45.2",   # vem com a anthropic; fixada na versão sem falha conhecida
   "cryptography==50.0.2",   # o pypdf precisa dela para abrir PDF com restrição de impressão (AES)
 ]
 

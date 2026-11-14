@@ -16,7 +16,7 @@ navegador ── HTTPS ── servidor (FastAPI)
 ## Portas
 | Porta | Hoje | Depois |
 | --- | --- | --- |
-| Motor | `MotorDemo`: esqueleto marcado, sem IA | adaptador da API do Claude (direta ou via Bedrock), com os especialistas e a verificação de fontes |
+| Motor | `MotorDemo` (padrão): esqueleto marcado, sem IA. `MotorClaude` (`app/motor_claude.py`): relatório dos autos pela API do Claude, só com dados fictícios | verificação de fontes, depois fundamentação; ficha de audiência; leitura de página digitalizada |
 | Conexão | `ConexaoPlanilha`: planilha do SIG entra, .docx sai | API do SIG ou MNI do eproc, se o MPSC abrir |
 
 ## Segurança (referência: OWASP ASVS)
@@ -37,6 +37,17 @@ O usuário envia o PDF na tela do processo. Fica guardado o texto de cada págin
 
 Página digitalizada não tem texto: é contada e avisada. A leitura dessas páginas (OCR ou leitura de imagem pelo motor) é assunto da etapa do motor, e é lá que se decide se o original precisa ser guardado.
 
+## Motor de IA
+O usuário envia os autos e pede o relatório na tela do processo. A escrita roda numa tarefa fora da requisição (`tarefas_minuta` guarda o estado); a tela acompanha e recarrega quando termina.
+
+- **O que sai do servidor:** a classe, o assunto e o texto das páginas dos autos daquele processo, inteiro (sem retirar CPF, endereço ou telefone). Não saem o número do processo nem o nome dos arquivos. Destino: API da Anthropic, em endereço e com credencial fixados no código (variável de ambiente que os mudaria impede a partida), com processamento pedido para os Estados Unidos (`inference_geo`). Hoje, só dados fictícios: a aplicação não parte com motor de IA e dado real, e processo com número real não é enviado.
+- **O que o modelo pode escrever:** relatório dos fatos, com a página de cada parágrafo, e pontos a enfrentar. A resposta tem formato fixo, sem campo para fundamentação nem pedido. Os pontos ficam numa lista na tela, fora da peça.
+- **O que a conferência garante, e o que não garante:** página citada que não foi enviada é descartada. Isso confirma que a página existe, não que ela diz o que o parágrafo afirma. Por isso todo relatório de IA é mostrado como "a conferir": essa é a garantia. Além dela, ficam marcados o parágrafo sem página e os que trazem formas comuns de citação de lei ou julgado e de fórmula de pedido. As marcas não pegam todas as formas.
+- **Texto dos autos é dado:** os sinais de menor e de maior do texto são trocados antes do envio, então uma página não fecha as marcas nem forja outra página. A instrução do modelo manda relatar, não obedecer. Uma ordem escondida nos autos pode, no máximo, levar a um parágrafo de relatório errado, que o promotor confere; não muda a estrutura da peça.
+- **Sem troca automática de modelo:** se o modelo declina, a escrita falha com aviso, em vez de a API passar o pedido a outro modelo.
+- **Registro:** `pedidos_ia` guarda quem pediu, para qual processo, quando, o resultado e o modelo que respondeu. Sem conteúdo. O registro de depuração e a telemetria da biblioteca ficam desligados, porque trariam o texto dos autos.
+- **Limites:** 1,5 milhão de caracteres de autos por pedido; uma escrita por vez por usuário e quatro no servidor; 20 pedidos por hora e 60 por dia por usuário; 10 minutos para a resposta inteira, sem nova tentativa automática; escrita com mais de 15 minutos é dada como falha, e um resultado que chegue depois disso é descartado. Os limites de concorrência valem por processo do servidor.
+
 ## Decisões
 - **13/11/2026 – Projeto separado do Gabinete** (titular). A aplicação web não muda a estrutura do Gabinete; reuso por cópia.
 - **13/11/2026 – Páginas feitas no servidor**, com pouco JavaScript: menos peças, carregamento rápido, CSP estrita.
@@ -47,11 +58,13 @@ Página digitalizada não tem texto: é contada e avisada. A leitura dessas pág
 ## O que falta para uso real
 As decisões que são do titular estão em `docs/CARTOES.md`.
 
-1. Adaptador do motor com a API do Claude, lendo os autos já guardados; leitura das páginas digitalizadas; verificação de fontes.
+1. Verificação de fontes, e só então fundamentação escrita pelo motor; leitura das páginas digitalizadas; ficha de audiência pelo motor.
 2. Hospedagem e contrato institucionais; parecer de LGPD; registro de acessos.
 3. Migrações de banco (Alembic) e Postgres; limite de tentativas em armazenamento compartilhado.
 4. Segundo fator no login; troca de senha pela pessoa.
 5. Pauta lida do eproc ou do 365, em vez de digitada.
-6. Autos: prazo de guarda do texto e exclusão de processo e de usuário; decidir se a impressão digital (`sha256`) do arquivo continua guardada; rever cota e limites com autos reais.
-7. Hospedagem: um processo de servidor só, ou vagas de leitura em armazenamento compartilhado (hoje valem por processo); pasta da aplicação só de leitura; proxy com prazo para o corpo da requisição; disco e pasta temporária cifrados (o envio passa pelo disco antes da leitura); com Postgres, rotina de limpeza no lugar do `secure_delete`.
-8. Conferência de dependências no CI (`pip-audit` ou Dependabot) e versões fixadas por hash.
+6. Motor de IA, antes de dado real: contrato e parecer (C4), retenção do lado do fornecedor, retirar dados pessoais de terceiros antes do envio, teto de gasto no painel do fornecedor (C8).
+7. Prazo de guarda do registro de pedidos à IA (`pedidos_ia`) e exclusão junto com o processo e o usuário.
+8. Autos: prazo de guarda do texto e exclusão de processo e de usuário; decidir se a impressão digital (`sha256`) do arquivo continua guardada; rever cota e limites com autos reais.
+9. Hospedagem: um processo de servidor só, ou vagas de leitura em armazenamento compartilhado (hoje valem por processo); pasta da aplicação só de leitura; proxy com prazo para o corpo da requisição; disco e pasta temporária cifrados (o envio passa pelo disco antes da leitura); com Postgres, rotina de limpeza no lugar do `secure_delete`.
+10. Conferência de dependências no CI (`pip-audit` ou Dependabot) e versões fixadas por hash.

@@ -27,9 +27,58 @@
     });
   });
 
+  // ---- relatório sendo escrito pela IA: acompanha, diz há quanto tempo e recarrega quando termina
+  const escrevendo = document.getElementById("escrevendo");
+  if (escrevendo) {
+    const texto = document.getElementById("espera-texto");
+    const inicio = Date.now() - 1000 * Number(escrevendo.dataset.decorrido || 0);
+    let minutosDitos = 0;
+    const olhar = async () => {
+      try {
+        const r = await fetch(escrevendo.dataset.acompanhar, { headers: { Accept: "application/json" } });
+        // sessão encerrada ou resposta que não é do servidor: recarregar leva ao login ou mostra o estado certo
+        if (!r.ok || !(r.headers.get("content-type") || "").includes("json")) { window.location.reload(); return; }
+        if ((await r.json()).estado !== "escrevendo") { window.location.reload(); return; }
+      } catch { /* sem conexão: tenta de novo */ }
+      const minutos = Math.floor((Date.now() - inicio) / 60000);
+      if (texto && minutos > minutosDitos) {
+        minutosDitos = minutos;
+        texto.textContent = minutos >= 4
+          ? "Está demorando mais que o normal (há " + minutos + " min). Pode sair desta tela; o resultado fica aqui."
+          : "Há " + minutos + " min. Costuma levar de um a três minutos. Pode sair desta tela.";
+      }
+      setTimeout(olhar, 3000);
+    };
+    setTimeout(olhar, 3000);
+  }
+  // resultado da escrita que acabou de chegar: leva o foco até ele, para ser visto e lido em voz alta
+  document.querySelector("#resultado-escrita[data-foco]")?.focus();
+
   // ---- minuta: cada parágrafo é um bloco editável; salva sozinha pouco depois da última tecla
   const folha = document.getElementById("folha");
   const estado = document.getElementById("estado-salvar");
+  // trechos entre colchetes que a pessoa ainda precisa completar, conferir ou definir
+  const MARCA = /\[(?:(?:CONFERIR|ESCREVER|DEFINIR)[^\]]*|COMARCA|DEMONSTRAÇÃO)\]/g;
+  const pendentes = () => (folha ? (folha.innerText.match(MARCA) || []).length : 0);
+  const destacar = () => {   // pinta as marcas sem mexer no texto editável
+    if (!folha || !window.Highlight || !CSS.highlights) return;
+    const trechos = [];
+    const nos = document.createTreeWalker(folha, NodeFilter.SHOW_TEXT);
+    for (let no = nos.nextNode(); no; no = nos.nextNode()) {
+      for (const achado of no.data.matchAll(MARCA)) {
+        const trecho = new Range();
+        trecho.setStart(no, achado.index); trecho.setEnd(no, achado.index + achado[0].length);
+        trechos.push(trecho);
+      }
+    }
+    CSS.highlights.set("marca", new Highlight(...trechos));
+  };
+  const podeSair = (acao) => {
+    const n = pendentes();
+    return !n || window.confirm((n === 1 ? "Ainda há 1 trecho entre colchetes a completar. "
+      : "Ainda há " + n + " trechos entre colchetes a completar. ") + acao + " assim mesmo?");
+  };
+  destacar();
   if (folha && estado) {
     let espera = null, pendente = false, salvando = false;
     const marcar = (texto, classe) => { estado.textContent = texto; estado.className = "selo empurra " + (classe || ""); };
@@ -52,7 +101,9 @@
       salvando = false;
       if (pendente) salvar();
     };
-    const agendar = () => { marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); };
+    const agendar = () => {
+      marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar();
+    };
 
     folha.addEventListener("input", agendar);
     folha.addEventListener("paste", (e) => {   // cola sempre como texto simples, sem trazer formatação de fora
@@ -87,6 +138,7 @@
     });
     // antes de baixar, garante que o arquivo sai com a última versão
     document.getElementById("baixar-docx")?.addEventListener("click", async (e) => {
+      if (!podeSair("Baixar")) { e.preventDefault(); return; }
       if (estado.textContent !== "Alterada") return;
       const destino = e.currentTarget.href;
       e.preventDefault(); clearTimeout(espera); await salvar(); window.location.href = destino;
@@ -95,6 +147,7 @@
 
   const copiar = document.getElementById("copiar");
   copiar?.addEventListener("click", async () => {
+    if (!podeSair("Copiar")) return;
     const original = copiar.textContent;
     try {
       const texto = folha ? [...folha.querySelectorAll(".b")].map((p) => p.innerText.trim()).filter(Boolean).join("\n\n")

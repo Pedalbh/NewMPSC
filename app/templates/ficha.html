@@ -19,7 +19,7 @@
   <aside class="lateral pilha-cartoes">
     <section class="cartao"><h2>Antes do ato</h2><ul class="lista">{% for x in a.ficha.pendencias %}<li>{{ x }}</li>{% endfor %}</ul></section>
     <section class="cartao so-tela">
-      <p class="fraco pequeno">Ficha feita pelo motor: {{ a.motor }}.</p>
+      <p class="fraco pequeno">{{ "Ficha em branco, para você preencher." if ia else "Ficha de demonstração." }}</p>
       <form method="post" action="/audiencias/{{ a.id }}/remover">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn perigo largo" type="submit">Remover da pauta</button>

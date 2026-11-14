@@ -51,6 +51,8 @@ class Processo(Base):
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     minuta: Mapped["Minuta | None"] = relationship(back_populates="processo", cascade="all, delete-orphan",
                                                     uselist=False)
+    tarefa: Mapped["TarefaMinuta | None"] = relationship(back_populates="processo", cascade="all, delete-orphan",
+                                                         uselist=False)
     autos: Mapped[list["ArquivoAutos"]] = relationship(back_populates="processo", cascade="all, delete-orphan",
                                                        order_by="ArquivoAutos.id")
 
@@ -65,6 +67,34 @@ class Minuta(Base):
     editada: Mapped[bool] = mapped_column(Boolean, default=False)
     atualizada_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     processo: Mapped[Processo] = relationship(back_populates="minuta")
+
+
+class TarefaMinuta(Base):
+    """A escrita da minuta pelo motor de IA, que demora: uma por processo, com o estado para a tela acompanhar."""
+    __tablename__ = "tarefas_minuta"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), unique=True)
+    estado: Mapped[str] = mapped_column(String(20), default="escrevendo")   # escrevendo | pronta | falhou
+    erro: Mapped[str] = mapped_column(String(300), default="")
+    iniciada_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    pontos: Mapped[list] = mapped_column(JSON, default=list)       # pontos a enfrentar: lista de conferência na tela
+    vista: Mapped[bool] = mapped_column(Boolean, default=False)    # o resultado já foi mostrado ao usuário
+    chave: Mapped[str] = mapped_column(String(16), default="")     # distingue esta escrita de outra do mesmo processo
+    repetir: Mapped[bool] = mapped_column(Boolean, default=True)   # na falha: adianta tentar de novo sem mudar nada
+    processo: Mapped[Processo] = relationship(back_populates="tarefa")
+
+
+class PedidoIA(Base):
+    """Registro de cada pedido ao serviço de IA: quem, qual processo, quando, qual modelo respondeu.
+    Sem conteúdo. Serve à prestação de contas e aos limites de pedidos."""
+    __tablename__ = "pedidos_ia"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), index=True)
+    feito_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
+    modelo: Mapped[str] = mapped_column(String(60), default="")
+    resultado: Mapped[str] = mapped_column(String(20), default="em curso")   # em curso | pronta | falhou
+    chave: Mapped[str] = mapped_column(String(16), default="", index=True)    # a mesma da tarefa que gerou o pedido
 
 
 class ArquivoAutos(Base):
