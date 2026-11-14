@@ -735,3 +735,13 @@ def test_falha_depois_da_troca_registra_os_dois_modelos(ana_ia, cliente_ia, banc
     banco_ia.expire_all()
     pedido = banco_ia.scalar(select(PedidoIA))
     assert (pedido.resultado, pedido.modelo) == ("falhou", "claude-opus-5-5 > claude-opus-5")
+
+
+
+def test_falha_no_meio_da_resposta_registra_o_modelo_pedido(ana_ia, cliente_ia, banco_ia):
+    """Os autos podem já ter saído: o registro diz para qual modelo, mesmo sem resposta inteira."""
+    enviar_autos(ana_ia)
+    cliente_ia._erro = _erro_da_api(anthropic.InternalServerError, 503)
+    ana_ia.enviar("/processos/1/escrever")
+    banco_ia.expire_all()
+    assert banco_ia.scalar(select(PedidoIA.modelo)) == "claude-opus-5-5"
