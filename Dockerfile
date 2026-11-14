@@ -5,7 +5,8 @@ WORKDIR /srv
 COPY pyproject.toml ./
 COPY app ./app
 COPY dados_ficticios ./dados_ficticios
-RUN pip install --no-cache-dir . && useradd --system --home /srv newmpsc && mkdir /dados && chown newmpsc /dados
+RUN apt-get update && apt-get install -y --no-install-recommends tzdata && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir . && useradd --system --home /srv newmpsc && mkdir /dados && chown newmpsc /dados
 USER newmpsc
 ENV NEWMPSC_BANCO=sqlite:////dados/newmpsc.db
 EXPOSE 8000
