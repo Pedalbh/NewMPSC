@@ -233,7 +233,8 @@ class MotorClaude:
                 limite = time.monotonic() + TEMPO_TOTAL
                 for _ in fluxo:   # a resposta chega aos pedaços; o teto vale para ela inteira
                     if time.monotonic() > limite:
-                        raise MotorIndisponivel("a IA demorou demais para responder; tente de novo")
+                        raise MotorIndisponivel("a IA demorou demais para responder; tente de novo",
+                                                modelos=self.modelo)
                 mensagem = fluxo.get_final_message()
         except anthropic.AuthenticationError:
             raise MotorIndisponivel(
@@ -246,12 +247,14 @@ class MotorClaude:
                 raise MotorIndisponivel("os autos são grandes demais para uma só leitura; deixe no processo só os "
                                         "arquivos que importam para esta manifestação", passageira=False) from None
             if e.status_code >= 500 or e.status_code < 400:   # abaixo de 400: erro vindo no meio da resposta
-                raise MotorIndisponivel("o serviço de IA está fora do ar; tente de novo em alguns minutos") from None
+                raise MotorIndisponivel("o serviço de IA está fora do ar; tente de novo em alguns minutos",
+                                        modelos=self.modelo) from None
             raise MotorIndisponivel(
                 "o serviço de IA não aceitou o pedido. Avise o suporte do NewMPSC",
                 passageira=False) from None
-        except anthropic.APIConnectionError:
-            raise MotorIndisponivel("não foi possível falar com o serviço de IA; tente de novo") from None
+        except anthropic.APIConnectionError:   # a conexão pode ter caído com os autos já enviados
+            raise MotorIndisponivel("não foi possível falar com o serviço de IA; tente de novo",
+                                    modelos=self.modelo) from None
         blocos = list(mensagem.content)
         trocas = [i for i, b in enumerate(blocos) if b.type == "fallback"]
         # quem recebeu os autos: o modelo pedido e cada reserva que entrou (só nomes, para o registro)
