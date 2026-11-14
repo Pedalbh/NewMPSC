@@ -27,6 +27,19 @@
     });
   });
 
+  // ---- minuta sendo escrita pelo motor: acompanha e recarrega quando termina
+  const escrevendo = document.getElementById("escrevendo");
+  if (escrevendo) {
+    const olhar = async () => {
+      try {
+        const d = await (await fetch(escrevendo.dataset.acompanhar, { headers: { Accept: "application/json" } })).json();
+        if (d.estado !== "escrevendo") { window.location.reload(); return; }
+      } catch { /* sem conexão: tenta de novo */ }
+      setTimeout(olhar, 3000);
+    };
+    setTimeout(olhar, 3000);
+  }
+
   // ---- minuta: cada parágrafo é um bloco editável; salva sozinha pouco depois da última tecla
   const folha = document.getElementById("folha");
   const estado = document.getElementById("estado-salvar");

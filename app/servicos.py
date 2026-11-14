@@ -8,10 +8,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .autos import Leitura, limpar
-from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, Processo, Usuario
+from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, Processo, TarefaMinuta, Usuario
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
-from .portas import ConexaoPlanilha, DadosProcesso, Motor
+from .portas import ConexaoPlanilha, DadosProcesso, Motor, MotorIndisponivel, PaginaDosAutos, esqueleto
 
 CNJ = re.compile(r"(?<!\d)\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}(?!\d)")
 GRUPOS = ("Réu preso", "Vista urgente", "Intimação", "Outros")
@@ -37,11 +37,77 @@ class ResultadoImportacao:
     conferir: list[str] = field(default_factory=list)
 
 
+def _dados(processo: Processo, com_autos: bool = False) -> DadosProcesso:
+    # objeto talvez ainda não gravado: os valores padrão das colunas só existem depois do flush
+    autos = tuple(PaginaDosAutos(a.nome, p.numero, p.texto) for a in processo.autos for p in a.paginas) \
+        if com_autos else ()
+    return DadosProcesso(processo.numero, processo.classe or "", processo.assunto or "", processo.vista or "",
+                         bool(processo.reu_preso), autos)
+
+
 def _criar_minuta(processo: Processo, motor: Motor) -> None:
-    # objeto ainda não gravado: os valores padrão das colunas só existem depois do flush
-    m = motor.elaborar_minuta(DadosProcesso(processo.numero, processo.classe or "", processo.assunto or "",
-                                            processo.vista or "", bool(processo.reu_preso)))
-    processo.minuta = Minuta(tipo=m["tipo"], blocos=documento.folha(m), motor=motor.nome)
+    """Primeira minuta do processo. O motor que precisa dos autos não é chamado aqui: fica a estrutura da peça,
+    e o usuário pede a escrita depois de enviar os autos."""
+    if motor.usa_autos:
+        m, nome = esqueleto(_dados(processo)), "a escrever"
+    else:
+        m, nome = motor.elaborar_minuta(_dados(processo)), motor.nome
+    processo.minuta = Minuta(tipo=m["tipo"], blocos=documento.folha(m), motor=nome)
+
+
+class EscritaRecusada(ValueError):
+    """A mensagem é a orientação mostrada ao usuário."""
+
+
+def pedir_escrita(db: Session, processo: Processo, motor: Motor) -> TarefaMinuta:
+    """Marca que a minuta deste processo está sendo escrita pelo motor. Levanta `EscritaRecusada`."""
+    if not motor.usa_autos:
+        raise EscritaRecusada("o motor em uso não escreve a partir dos autos")
+    if not any(p.texto for a in processo.autos for p in a.paginas):
+        raise EscritaRecusada("envie antes os autos em PDF, com texto para ler")
+    if processo.tarefa and processo.tarefa.estado == "escrevendo":
+        raise EscritaRecusada("a minuta deste processo já está sendo escrita")
+    em_curso = db.scalar(select(func.count()).select_from(TarefaMinuta).join(Processo).where(
+        Processo.usuario_id == processo.usuario_id, TarefaMinuta.estado == "escrevendo"))
+    if em_curso:
+        raise EscritaRecusada("já há uma minuta sua sendo escrita; espere terminar")
+    if processo.tarefa:
+        db.delete(processo.tarefa)
+        db.flush()
+    processo.tarefa = TarefaMinuta()
+    db.commit()
+    return processo.tarefa
+
+
+def escrever_minuta(db: Session, processo_id: int, motor: Motor) -> None:
+    """Roda fora da requisição: chama o motor com os autos e grava a minuta, ou o motivo da falha."""
+    processo = db.get(Processo, processo_id)
+    if processo is None or processo.tarefa is None or processo.tarefa.estado != "escrevendo":
+        return
+    dados = _dados(processo, com_autos=True)
+    db.commit()   # devolve a conexão do banco enquanto o motor trabalha
+    try:
+        m = motor.elaborar_minuta(dados)
+        blocos = documento.normalizar(documento.folha(m))
+    except MotorIndisponivel as e:
+        estado, erro = "falhou", str(e)[:300]
+    except Exception:   # noqa: BLE001 (a tarefa nunca fica presa em "escrevendo")
+        estado, erro = "falhou", "a escrita falhou por um erro inesperado; tente de novo"
+    else:
+        estado, erro = "pronta", ""
+        if processo.minuta:
+            db.delete(processo.minuta)
+            db.flush()
+        processo.minuta = Minuta(tipo=m["tipo"], blocos=blocos, motor=f"{motor.nome}, não conferido")
+    processo.tarefa.estado, processo.tarefa.erro = estado, erro
+    db.commit()
+
+
+def encerrar_escritas_interrompidas(db: Session) -> None:
+    """Na partida do servidor: o que estava sendo escrito quando ele parou é marcado como falha."""
+    for tarefa in db.scalars(select(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo")):
+        tarefa.estado, tarefa.erro = "falhou", "o servidor reiniciou durante a escrita; peça de novo"
+    db.commit()
 
 
 def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None, conexao: ConexaoPlanilha,
@@ -106,6 +172,8 @@ def processo_do_usuario(db: Session, usuario: Usuario, processo_id: int) -> Proc
 
 
 def salvar_minuta(db: Session, processo: Processo, blocos) -> Minuta:
+    if processo.tarefa and processo.tarefa.estado == "escrevendo":
+        raise ValueError("a minuta está sendo escrita pelo motor; espere terminar")
     processo.minuta.blocos = documento.normalizar(blocos)
     processo.minuta.editada = True
     processo.minuta.atualizada_em = datetime.now()
@@ -114,6 +182,10 @@ def salvar_minuta(db: Session, processo: Processo, blocos) -> Minuta:
 
 
 def refazer_minuta(db: Session, processo: Processo, motor: Motor) -> None:
+    if processo.tarefa and processo.tarefa.estado == "escrevendo":
+        raise ValueError("a minuta está sendo escrita pelo motor; espere terminar")
+    if processo.tarefa:
+        db.delete(processo.tarefa)
     if processo.minuta:
         db.delete(processo.minuta)
         db.flush()

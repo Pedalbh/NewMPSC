@@ -138,6 +138,7 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .soltar { display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center; padding: var(--e5) var(--e4); border: 1.5px dashed var(--linha-forte); border-radius: var(--raio-m); cursor: pointer; transition: background var(--rapido), border-color var(--rapido); }
 .soltar:hover, .soltar.sobre, .soltar:focus-within { background: var(--relevo); border-color: var(--primaria); }
 .soltar-titulo { font-weight: 600; }
+.espera { align-items: center; text-align: center; padding: var(--e7) var(--e5); }
 .soltar.enviando { pointer-events: none; border-style: solid; background: var(--relevo); }
 .soltar:has(:focus-visible) { outline: 2px solid var(--primaria); outline-offset: 2px; }
 .arquivos { display: flex; flex-direction: column; }

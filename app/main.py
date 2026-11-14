@@ -1,5 +1,6 @@
 """Montagem da aplicação: sessão, cabeçalhos de segurança, rotas e telas."""
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -24,6 +25,7 @@ TETO_PLANILHA = 20 * 1024 * 1024
 TETO_CORPO = autos.TETO_PDF + 10 * 1024 * 1024   # maior requisição aceita de quem entrou
 TETO_CORPO_ANONIMO = 64 * 1024                    # quem não entrou só envia o formulário de login
 MAX_PDFS_POR_ENVIO = 5
+ESCRITAS_POR_HORA = 20   # pedidos de minuta ao motor de IA, por usuário
 TEMPO_ENVIO = 120   # segundos de leitura somados num envio
 DIAS = ("segunda-feira", "terça-feira", "quarta-feira", "quinta-feira", "sexta-feira", "sábado", "domingo")
 MESES = ("janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro",
@@ -40,21 +42,26 @@ def _dia_extenso(d: datetime) -> str:
     return f"{DIAS[d.weekday()]}, {d.day} de {MESES[d.month - 1]}"
 
 
-def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
+def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_segundo_plano=None) -> FastAPI:
+    """`motor` e `em_segundo_plano` existem para os testes: um motor de mentira e a escrita feita na hora."""
     config = config or carregar()
     motor_banco, Sessao = criar_banco(config.banco_url)
-    motor = criar_motor(config.motor)
+    motor = motor or criar_motor(config.motor, config.modelo)
     conexao = ConexaoPlanilha()
     limite = LimiteTentativas()
+    limite_escritas = LimiteTentativas(maximo=ESCRITAS_POR_HORA, janela=3600)
+    em_segundo_plano = em_segundo_plano or ThreadPoolExecutor(max_workers=2, thread_name_prefix="minuta").submit
+    with Sessao() as db:
+        servicos.encerrar_escritas_interrompidas(db)
 
     app = FastAPI(title="NewMPSC", version=VERSAO, docs_url=None, redoc_url=None, openapi_url=None)
-    app.state.Sessao, app.state.config, app.state.limite = Sessao, config, limite
+    app.state.Sessao, app.state.config, app.state.limite, app.state.motor = Sessao, config, limite, motor
     app.mount("/static", StaticFiles(directory=AQUI / "static"), name="static")
     telas = Jinja2Templates(directory=AQUI / "templates")
     telas.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else "—"
     telas.env.filters["hora"] = lambda d: d.strftime("%H:%M") if d else ""
     telas.env.filters["dia_extenso"] = _dia_extenso
-    telas.env.globals.update(versao=VERSAO, grupos=servicos.GRUPOS, config=config)
+    telas.env.globals.update(versao=VERSAO, grupos=servicos.GRUPOS, config=config, motor=motor)
 
     @app.middleware("http")
     async def cabecalhos(request: Request, call_next):
@@ -328,9 +335,36 @@ def criar_app(config: Config | None = None, agora=datetime.now) -> FastAPI:
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])
     def refazer(request: Request, p=Depends(meu_processo), db=Depends(banco)):
-        servicos.refazer_minuta(db, db.merge(p), motor)
-        avisar(request, "ok", "Minuta refeita pelo motor.")
+        try:
+            servicos.refazer_minuta(db, db.merge(p), motor)
+        except ValueError as e:
+            raise HTTPException(409, str(e).capitalize() + ".") from None
+        avisar(request, "ok", "Minuta em branco, pronta para escrever." if motor.usa_autos
+               else "Minuta refeita pelo motor.")
         return voltar(f"/processos/{p.id}")
+
+    def _escrever(processo_id: int) -> None:
+        with Sessao() as db:
+            servicos.escrever_minuta(db, processo_id, motor)
+
+    @app.post("/processos/{processo_id}/escrever", dependencies=[Depends(exigir_csrf)])
+    def escrever(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+        """Pede ao motor de IA o relatório a partir dos autos. A escrita roda fora da requisição."""
+        chave = f"escrita|{p.usuario_id}"
+        try:
+            if limite_escritas.bloqueado(chave):
+                raise servicos.EscritaRecusada("você chegou ao limite de pedidos por hora; tente mais tarde")
+            servicos.pedir_escrita(db, db.merge(p), motor)
+        except servicos.EscritaRecusada as e:
+            avisar(request, "erro", f"A minuta não foi pedida: {e}.")
+            return voltar(f"/processos/{p.id}")
+        limite_escritas.registrar_falha(chave)   # conta o pedido
+        em_segundo_plano(_escrever, p.id)
+        return voltar(f"/processos/{p.id}")
+
+    @app.get("/api/processos/{processo_id}/escrita")
+    def escrita(p=Depends(meu_processo)):
+        return {"estado": p.tarefa.estado if p.tarefa else "nenhuma"}
 
     @app.put("/api/processos/{processo_id}/minuta", dependencies=[Depends(exigir_csrf)])
     async def salvar(request: Request, p=Depends(meu_processo), db=Depends(banco)):

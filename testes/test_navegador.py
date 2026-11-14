@@ -23,10 +23,8 @@ CHROME = os.environ.get("NEWMPSC_CHROME", "")
 PRINTS = os.environ.get("NEWMPSC_PRINTS")
 
 
-@pytest.fixture(scope="module")
-def endereco(tmp_path_factory):
-    banco = tmp_path_factory.mktemp("banco") / "newmpsc.db"
-    app = criar_app(Config("teste", "s" * 40, f"sqlite:///{banco}", "demo", True))
+def _servir(pasta, motor_nome="demo", **opcoes):
+    app = criar_app(Config("teste", "s" * 40, f"sqlite:///{pasta / 'newmpsc.db'}", motor_nome, True), **opcoes)
     with app.state.Sessao() as db:
         criar_usuario(db, "ana@exemplo.invalid", "Ana Exemplo", SENHA, "Promotora de Justiça")
     with socket.socket() as s:
@@ -38,7 +36,29 @@ def endereco(tmp_path_factory):
         if servidor.started:
             break
         time.sleep(0.05)
-    yield f"http://127.0.0.1:{porta}"
+    return servidor, f"http://127.0.0.1:{porta}"
+
+
+@pytest.fixture(scope="module")
+def endereco(tmp_path_factory):
+    servidor, url = _servir(tmp_path_factory.mktemp("banco"))
+    yield url
+    servidor.should_exit = True
+
+
+@pytest.fixture(scope="module")
+def endereco_ia(tmp_path_factory):
+    """Servidor com o motor de IA ligado a um cliente de mentira, que demora um pouco para responder."""
+    from app.motor_claude import MotorClaude
+    from testes.test_motor import ClienteFalso
+
+    class ClienteLento(ClienteFalso):
+        def _stream(self, **pedido):
+            time.sleep(1.5)
+            return super()._stream(**pedido)
+
+    servidor, url = _servir(tmp_path_factory.mktemp("banco-ia"), "claude", motor=MotorClaude(ClienteLento()))
+    yield url
     servidor.should_exit = True
 
 
@@ -182,4 +202,30 @@ def test_celular(endereco, pagina):
     foto(pg, "11-tablet")
     pg.set_viewport_size({"width": 1030, "height": 700})   # janela em que a barra de rolagem tiraria a 2ª coluna
     assert pg.evaluate(estilo) == "static visible"
+    assert pg.erros == [], pg.erros
+
+
+def test_relatorio_escrito_pelo_motor_de_ia(endereco_ia, pagina):
+    """Enviar os autos, pedir o relatório, esperar na tela e receber a minuta com as páginas citadas."""
+    pg = pagina
+    pg.set_viewport_size({"width": 1360, "height": 900})
+    pg.context.clear_cookies()   # outro servidor no mesmo endereço: a sessão do anterior não vale aqui
+    pg.goto(endereco_ia)
+    pg.get_by_label("E-mail").fill("ana@exemplo.invalid")
+    pg.get_by_label("Senha").fill(SENHA)
+    pg.get_by_role("button", name="Entrar").click()
+    pg.set_input_files("#planilha", str(FILA))
+    pg.locator(".fila .proc").first.click()
+    assert "[A ESCREVER] Envie os autos" in pg.locator("#folha").inner_text()
+    assert pg.get_by_role("button", name="Escrever o relatório").count() == 0
+    pg.set_input_files("#autos-pdf", str(RAIZ / "dados_ficticios" / "autos-ficticios.pdf"))
+    pg.get_by_role("button", name="Escrever o relatório").click()
+    pg.get_by_text("Escrevendo o relatório a partir dos autos").wait_for()
+    assert pg.locator("#folha").count() == 0
+    foto(pg, "12-escrevendo")
+    pg.locator("#folha").wait_for(timeout=15000)   # a tela recarrega sozinha quando a escrita termina
+    assert "(autos-ficticios.pdf, p. 1)" in pg.locator("#folha").inner_text()
+    assert "[A DEFINIR PELO PROMOTOR]" in pg.locator("#folha").inner_text()
+    sync_api.expect(pg.get_by_text("Relatório escrito por IA a partir dos autos.")).to_be_visible()
+    foto(pg, "13-relatorio-de-ia")
     assert pg.erros == [], pg.erros

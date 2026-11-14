@@ -17,9 +17,21 @@
 
 <div class="grade">
   <section class="principal" aria-label="Minuta">
+    {% set escrevendo = p.tarefa and p.tarefa.estado == 'escrevendo' %}
+    {% if escrevendo %}
+    <div class="cartao espera" id="escrevendo" role="status" data-acompanhar="/api/processos/{{ p.id }}/escrita">
+      <p class="vazio-titulo">Escrevendo o relatório a partir dos autos…</p>
+      <p class="fraco">Costuma levar de um a três minutos. Pode sair desta tela; a minuta fica aqui quando terminar.</p>
+      <noscript><a class="btn" href="/processos/{{ p.id }}">Atualizar</a></noscript>
+    </div>
+    {% else %}
+    {% if p.tarefa and p.tarefa.estado == 'falhou' %}
+    <div class="aviso erro" role="status"><p>A minuta não foi escrita: {{ p.tarefa.erro }}.</p></div>
+    {% endif %}
     <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" aria-label="Texto da minuta, editável">
       {% for b in minuta.blocos %}<p class="b b-{{ b.estilo }}" data-estilo="{{ b.estilo }}" contenteditable="true" spellcheck="true">{{ b.texto }}</p>{% endfor %}
     </div>
+    {% endif %}
   </section>
 
   <aside class="lateral pilha-cartoes fixo" aria-label="Ações">
@@ -28,6 +40,9 @@
         <h2>Minuta</h2>
         <span class="selo empurra" id="estado-salvar" role="status" aria-live="polite">{{ 'Salva às ' ~ (minuta.atualizada_em | hora) if minuta.editada else 'Sem alterações' }}</span>
       </div>
+      {% if 'não conferido' in minuta.motor %}
+      <p class="aviso atencao pequeno">Relatório escrito por IA a partir dos autos. Confira cada página citada antes de usar. A fundamentação e o pedido são seus.</p>
+      {% endif %}
       <a class="btn principal largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
       <button class="btn largo" type="button" id="copiar" data-origem="/processos/{{ p.id }}/minuta.txt">Copiar texto</button>
       <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
@@ -71,7 +86,14 @@
         </label>
         <noscript><button class="btn largo" type="submit">Enviar PDF</button></noscript>
       </form>
-      <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if config.motor == 'demo' %} Por enquanto, a minuta ainda não usa os autos.{% endif %}</p>
+      {% if motor.usa_autos and p.autos and not escrevendo %}
+      <form method="post" action="/processos/{{ p.id }}/escrever">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn principal largo" type="submit">Escrever o relatório</button>
+      </form>
+      <p class="fraco pequeno">A IA lê os autos enviados e escreve o relatório. O texto dos autos vai ao serviço de IA.{% if minuta.editada %} O texto atual da minuta, com as suas alterações, é substituído.{% endif %}</p>
+      {% endif %}
+      <p class="fraco pequeno">Só o texto de cada página fica guardado; o arquivo, não.{% if not motor.usa_autos %} Por enquanto, a minuta ainda não usa os autos.{% endif %}</p>
     </section>
 
     <section class="cartao">

@@ -63,6 +63,25 @@ Como responder: diga na conversa o número do cartão e a opção (por exemplo, 
 - **Recomendo:** B.
 - **O que espera:** a etapa 3.
 
+### C7 · O que o motor de IA escreve antes de existir a verificação de fontes
+- **Por que é sua:** conteúdo jurídico (limite 5 do `CLAUDE.md`).
+- **Hoje (como a etapa 2 foi construída):** o motor escreve só o relatório dos fatos, com a página de cada parágrafo, e a lista de pontos a enfrentar. Fundamentação e pedido ficam em branco, marcados para você.
+- **Opções**
+  - **A.** Manter assim até a verificação de fontes (etapa 3) existir.
+  - **B.** Deixar o motor rascunhar também a fundamentação, com toda citação de lei e de julgado marcada como "não conferida". Exige mudar o limite 5.
+- **Recomendo:** A. É o que o limite 5 já manda, e o relatório é a parte que mais poupa leitura.
+- **O que espera:** nada. A etapa 2 já segue a opção A.
+
+### C8 · Qual modelo o motor usa, e o teto de gasto
+- **Por que é sua:** dinheiro.
+- **Hoje:** `claude-opus-5-5`, o padrão recomendado pela Anthropic. Preço de tabela em 03/11/2026: US$ 4 por milhão de tokens de entrada e US$ 20 por milhão de saída. Estimativa minha, sem medição: autos de 500 páginas dão algo como 400 mil tokens de entrada, perto de US$ 2 por relatório; autos de 50 páginas, perto de US$ 0,20. Limite atual: 20 pedidos por hora por usuário.
+- **Opções**
+  - **A.** Manter o modelo padrão e medir o custo real nos primeiros testes com dados fictícios, antes de fixar um teto.
+  - **B.** Trocar já por um modelo mais barato (`claude-sonnet-5-5`, metade do preço), aceitando relatório possivelmente pior.
+  - **C.** Fixar agora um teto mensal em dólares.
+- **Recomendo:** A.
+- **O que espera:** o primeiro teste com a API de verdade, que também depende de uma chave da API (você cria a chave; eu peço por formulário seguro, nunca na conversa).
+
 ## Decididos
 
 | Cartão | Decisão | Quando |

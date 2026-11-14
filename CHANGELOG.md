@@ -2,6 +2,18 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.3.0] - 2026-11-14
+
+### Adicionado
+- Motor de IA pela API do Claude (`NEWMPSC_MOTOR=claude`): na tela do processo, com os autos enviados, o botão "Escrever o relatório" pede o relatório ao modelo. Cada parágrafo sai com a página de onde veio.
+- O motor escreve só o relatório dos fatos e a lista de pontos a enfrentar. Fundamentação e pedido ficam marcados para o promotor escrever; citação jurídica só entra depois que houver verificação de fontes.
+- A escrita roda fora da tela: a pessoa pode sair e voltar. Falha do serviço mantém a minuta anterior e mostra o motivo.
+
+### Segurança
+- O motor de IA não liga com dado real: `NEWMPSC_MOTOR=claude` com `NEWMPSC_DADOS_FICTICIOS=0` impede a partida do servidor.
+- O texto dos autos vai ao modelo como dado, entre marcas próprias. A resposta só tem campo para relatório e pontos, e cada página citada é conferida contra as que foram enviadas.
+- Uma escrita por vez por usuário e 20 pedidos por hora.
+
 ## [0.2.0] - 2026-11-13
 
 ### Adicionado

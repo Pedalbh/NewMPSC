@@ -4,7 +4,7 @@ Aplicação web de trabalho do promotor: os processos recebidos, a minuta de cad
 
 Projeto separado do Gabinete: reaproveita, por cópia, o leitor da planilha do SIG e o gerador de .docx (`app/nucleo/ORIGEM.md`), e não altera aquele repositório.
 
-**Estado (0.2.0):** só dados fictícios. Os autos entram em PDF e são lidos página a página. A minuta e a ficha ainda vêm de um motor de demonstração, sem IA, que não lê os autos. A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
+**Estado (0.3.0):** só dados fictícios. Os autos entram em PDF e são lidos página a página. Com `NEWMPSC_MOTOR=claude`, o relatório da minuta é escrito pela API do Claude a partir dos autos, com a página de cada afirmação; fundamentação e pedido ficam com o promotor. O padrão continua sendo o motor de demonstração, sem IA. A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
 
 ## Rodar no computador
 
@@ -32,7 +32,9 @@ O teste `testes/test_navegador.py` faz a jornada inteira num navegador de verdad
 | `NEWMPSC_AMBIENTE` | `desenvolvimento`, `teste` ou `producao` | `desenvolvimento` |
 | `NEWMPSC_SEGREDO` | assina a sessão; obrigatório em produção (32 caracteres ou mais) | gerado a cada início |
 | `NEWMPSC_BANCO` | endereço do banco (SQLAlchemy) | `sqlite:///newmpsc.db` |
-| `NEWMPSC_MOTOR` | motor de minutas e fichas | `demo` |
+| `NEWMPSC_MOTOR` | motor de minutas e fichas: `demo` ou `claude` (só com dados fictícios) | `demo` |
+| `NEWMPSC_MODELO` | modelo usado pelo motor `claude` | `claude-opus-5-5` |
+| `ANTHROPIC_API_KEY` | chave da API do Claude, lida pela biblioteca; só para o motor `claude` | sem padrão |
 | `NEWMPSC_DADOS_FICTICIOS` | `0` só com hospedagem e contrato institucionais | `1` |
 
 ## Servidor de teste

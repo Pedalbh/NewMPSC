@@ -16,7 +16,7 @@ navegador ── HTTPS ── servidor (FastAPI)
 ## Portas
 | Porta | Hoje | Depois |
 | --- | --- | --- |
-| Motor | `MotorDemo`: esqueleto marcado, sem IA | adaptador da API do Claude (direta ou via Bedrock), com os especialistas e a verificação de fontes |
+| Motor | `MotorDemo` (padrão): esqueleto marcado, sem IA. `MotorClaude` (`app/motor_claude.py`): relatório dos autos pela API do Claude, só com dados fictícios | verificação de fontes, depois fundamentação; ficha de audiência; leitura de página digitalizada |
 | Conexão | `ConexaoPlanilha`: planilha do SIG entra, .docx sai | API do SIG ou MNI do eproc, se o MPSC abrir |
 
 ## Segurança (referência: OWASP ASVS)
@@ -37,6 +37,14 @@ O usuário envia o PDF na tela do processo. Fica guardado o texto de cada págin
 
 Página digitalizada não tem texto: é contada e avisada. A leitura dessas páginas (OCR ou leitura de imagem pelo motor) é assunto da etapa do motor, e é lá que se decide se o original precisa ser guardado.
 
+## Motor de IA
+O usuário envia os autos e pede o relatório na tela do processo. A escrita roda numa tarefa fora da requisição (`tarefas_minuta` guarda o estado); a tela acompanha e recarrega quando termina.
+
+- **O que sai do servidor:** o número do processo, a classe, o assunto e o texto das páginas dos autos daquele processo. O nome dos arquivos não sai. Destino: API da Anthropic. Hoje, só dados fictícios; o servidor não parte com motor de IA e dado real.
+- **O que o modelo pode escrever:** relatório dos fatos, com a página de cada parágrafo, e pontos a enfrentar. A resposta tem formato fixo, sem campo para fundamentação nem pedido. Página citada que não foi enviada é descartada, e parágrafo sem página fica marcado. Ponto que cita lei ou julgado fica marcado como não conferido.
+- **Texto dos autos é dado:** vai entre marcas próprias, e a instrução do modelo manda relatar, não obedecer. Como a resposta só vira texto de parágrafo, uma ordem escondida nos autos não muda a estrutura da peça.
+- **Limites:** 1,5 milhão de caracteres de autos por pedido (acima disso a pessoa escolhe o que deixar no processo); uma escrita por vez por usuário; 20 pedidos por hora.
+
 ## Decisões
 - **13/11/2026 – Projeto separado do Gabinete** (titular). A aplicação web não muda a estrutura do Gabinete; reuso por cópia.
 - **13/11/2026 – Páginas feitas no servidor**, com pouco JavaScript: menos peças, carregamento rápido, CSP estrita.
@@ -47,7 +55,7 @@ Página digitalizada não tem texto: é contada e avisada. A leitura dessas pág
 ## O que falta para uso real
 As decisões que são do titular estão em `docs/CARTOES.md`.
 
-1. Adaptador do motor com a API do Claude, lendo os autos já guardados; leitura das páginas digitalizadas; verificação de fontes.
+1. Verificação de fontes, e só então fundamentação escrita pelo motor; leitura das páginas digitalizadas; ficha de audiência pelo motor.
 2. Hospedagem e contrato institucionais; parecer de LGPD; registro de acessos.
 3. Migrações de banco (Alembic) e Postgres; limite de tentativas em armazenamento compartilhado.
 4. Segundo fator no login; troca de senha pela pessoa.

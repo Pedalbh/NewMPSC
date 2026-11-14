@@ -13,6 +13,7 @@ class Config:
     banco_url: str
     motor: str
     dados_ficticios: bool
+    modelo: str = ""
 
     @property
     def producao(self) -> bool:
@@ -27,11 +28,17 @@ def carregar(env=None) -> Config:
     segredo = env.get("NEWMPSC_SEGREDO", "")
     if ambiente == "producao" and len(segredo) < 32:
         raise RuntimeError("NEWMPSC_SEGREDO com 32 caracteres ou mais é obrigatório em produção")
+    motor = env.get("NEWMPSC_MOTOR", "demo")
+    ficticios = env.get("NEWMPSC_DADOS_FICTICIOS", "1") != "0"
+    if motor != "demo" and not ficticios:
+        # Cartão C4: texto de processo real só vai para um serviço de IA depois de contrato institucional.
+        raise RuntimeError("motor de IA só com dados fictícios: dado real depende de contrato institucional")
     return Config(
         ambiente=ambiente,
         segredo=segredo or secrets.token_urlsafe(32),
         banco_url=env.get("NEWMPSC_BANCO", "sqlite:///newmpsc.db"),
-        motor=env.get("NEWMPSC_MOTOR", "demo"),
+        motor=motor,
         # Enquanto não houver hospedagem e contrato institucionais, a aplicação só trabalha com dados fictícios.
-        dados_ficticios=env.get("NEWMPSC_DADOS_FICTICIOS", "1") != "0",
+        dados_ficticios=ficticios,
+        modelo=env.get("NEWMPSC_MODELO", ""),
     )
