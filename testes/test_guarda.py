@@ -281,3 +281,25 @@ def test_processo_concluido_nao_pede_relatorio(app_relogio, banco):
 
     with pytest.raises(servicos.EscritaRecusada, match="concluído"):
         servicos.pedir_escrita(banco, banco.get(Processo, 1), MotorDeIA(), True)
+
+
+def test_devolvido_a_fila_durante_a_limpeza_nao_perde_os_autos(app_relogio, banco, relogio, monkeypatch):
+    from app import servicos
+    concluir(entrar(app_relogio, banco, "ana@exemplo.invalid"))
+    relogio.passar(days=31)
+    original = banco.refresh
+
+    def devolve_antes(obj, *a, **kw):   # o usuário devolve à fila depois de a lista de vencidos ser lida
+        if isinstance(obj, Processo):
+            banco.execute(text("UPDATE processos SET situacao = 'a_fazer', concluido_em = NULL WHERE id = 1"))
+        return original(obj, *a, **kw)
+
+    monkeypatch.setattr(banco, "refresh", devolve_antes)
+    assert servicos.apagar_autos_vencidos(banco, relogio()) == 0
+    assert contar(banco, ArquivoAutos) == 1
+
+
+def test_comando_do_agendador_exige_o_segredo(monkeypatch):
+    monkeypatch.delenv("NEWMPSC_SEGREDO", raising=False)
+    with pytest.raises(SystemExit, match="NEWMPSC_SEGREDO"):
+        cli.main(["limpar-autos"])

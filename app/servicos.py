@@ -319,6 +319,9 @@ def apagar_autos_vencidos(db: Session, agora: datetime) -> int:
         Processo.situacao == "concluido", Processo.concluido_em <= agora - GUARDA_DEPOIS_DE_CONCLUIDO)).all()
     apagados = 0
     for arquivo in vencidos:
+        db.refresh(arquivo.processo, ["situacao", "concluido_em"])   # pode ter voltado à fila durante a limpeza
+        if autos_apagados_em(arquivo.processo) is None or autos_apagados_em(arquivo.processo) > agora:
+            continue
         tarefa = arquivo.processo.tarefa
         if escrevendo(arquivo.processo):
             if datetime.now() - tarefa.iniciada_em <= PRAZO_DA_ESCRITA:

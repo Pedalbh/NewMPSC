@@ -5,6 +5,7 @@
   python -m app.cli limpar-autos                    (apaga os autos vencidos; para o agendador da hospedagem)
 """
 import getpass
+import os
 import secrets
 import sys
 from datetime import datetime, timedelta
@@ -58,6 +59,9 @@ def semente(db, config, senha: str | None = None) -> str:
 
 def main(argv=None) -> None:
     argv = sys.argv[1:] if argv is None else argv
+    if argv == ["limpar-autos"] and not os.environ.get("NEWMPSC_SEGREDO"):
+        # sem o segredo do servidor, a chave das impressões seria sorteada e um banco antigo seria convertido com ela
+        raise SystemExit("defina NEWMPSC_SEGREDO igual ao do servidor antes de limpar os autos")
     config = carregar()
     _, Sessao = criar_banco(config.banco_url, config.chave_impressao)
     with Sessao() as db:
