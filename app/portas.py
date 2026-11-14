@@ -13,9 +13,10 @@ class MotorIndisponivel(Exception):
     """O motor não conseguiu escrever. A mensagem é a orientação mostrada ao usuário.
     `passageira` diz se adianta tentar de novo sem mudar nada."""
 
-    def __init__(self, mensagem: str, passageira: bool = True):
+    def __init__(self, mensagem: str, passageira: bool = True, modelos: str = ""):
         super().__init__(mensagem)
         self.passageira = passageira
+        self.modelos = modelos   # quem recebeu os autos, quando já se sabe (vai para o registro do pedido)
 
 
 @dataclass(frozen=True)

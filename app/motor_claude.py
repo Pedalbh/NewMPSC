@@ -21,7 +21,13 @@ from .portas import FECHO, DadosProcesso, MotorIndisponivel, PaginaDosAutos, tip
 
 MODELO_PADRAO = "claude-opus-5-5"
 # Lista fechada: nenhum modelo que exija guardar o conteúdo do lado do fornecedor entra por configuração.
+# A reserva do C14 (abaixo) fica fora da lista e não se escolhe por configuração; se ela vale na retenção zero e
+# roda nos Estados Unidos fica para CONFERIR no contrato (C4).
 MODELOS = (MODELO_PADRAO, "claude-sonnet-5-5", "claude-haiku-5-5")
+# Cartão C14: se o modelo padrão declinar, o próprio serviço passa o pedido a este modelo, e só a ele.
+# Os outros modelos da lista não têm reserva: a recusa chega à tela, como antes.
+RESERVA = {MODELO_PADRAO: "claude-opus-5"}
+BETA_RESERVA = "server-side-fallback-2026-07-01"
 ENDERECO = "https://api.anthropic.com"
 REGIAO = "us"                # onde o modelo processa; sem isso o padrão do serviço é qualquer região
 TEMPO = 120                  # segundos sem receber nada do serviço
@@ -210,14 +216,20 @@ class MotorClaude:
 
     def _perguntar(self, pedido: str) -> tuple[dict, str]:
         try:
-            with self._cliente.messages.stream(
+            campos = dict(
                 model=self.modelo,
                 max_tokens=MAX_SAIDA,
                 system=[{"type": "text", "text": SISTEMA, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": pedido}],
                 output_config={"effort": "high", "format": FORMATO},
                 inference_geo=REGIAO,
-            ) as fluxo:
+            )
+            if self.modelo in RESERVA:
+                abrir = self._cliente.beta.messages.stream
+                campos.update(betas=[BETA_RESERVA], fallbacks=[{"model": RESERVA[self.modelo]}])
+            else:
+                abrir = self._cliente.messages.stream
+            with abrir(**campos) as fluxo:
                 limite = time.monotonic() + TEMPO_TOTAL
                 for _ in fluxo:   # a resposta chega aos pedaços; o teto vale para ela inteira
                     if time.monotonic() > limite:
@@ -240,14 +252,33 @@ class MotorClaude:
                 passageira=False) from None
         except anthropic.APIConnectionError:
             raise MotorIndisponivel("não foi possível falar com o serviço de IA; tente de novo") from None
-        if mensagem.stop_reason == "refusal":
+        blocos = list(mensagem.content)
+        trocas = [i for i, b in enumerate(blocos) if b.type == "fallback"]
+        # quem recebeu os autos: o modelo pedido e cada reserva que entrou (só nomes, para o registro)
+        rodaram = " > ".join([self.modelo] + [str(getattr(blocos[i].to, "model", "")) for i in trocas])[:60] \
+            if trocas else str(getattr(mensagem, "model", "") or self.modelo)[:60]
+        try:
+            return self._ler(mensagem, blocos, trocas), rodaram
+        except MotorIndisponivel as e:
+            e.modelos = rodaram
+            raise
+
+    def _ler(self, mensagem, blocos: list, trocas: list[int]) -> dict:
+        if mensagem.stop_reason == "refusal":   # com reserva, quer dizer que os dois modelos declinaram
             raise MotorIndisponivel("a IA não aceitou escrever este relatório; escreva à mão", passageira=False)
         if mensagem.stop_reason == "model_context_window_exceeded":
             raise MotorIndisponivel("os autos são grandes demais para uma só leitura; deixe no processo só os "
                                     "arquivos que importam para esta manifestação", passageira=False)
         if mensagem.stop_reason == "max_tokens":
             raise MotorIndisponivel("a resposta da IA ficou incompleta; tente de novo")
-        escrito = "".join(b.text for b in mensagem.content if b.type == "text")
+        if trocas:
+            # Recusa no meio da resposta: a reserva continua o texto do modelo que declinou. Juntar os dois poria
+            # na minuta texto de quem declinou; por isso a escrita falha. Recusa antes de qualquer texto: vale a
+            # resposta inteira da reserva.
+            if any(b.type == "text" for b in blocos[:trocas[-1]]):
+                raise MotorIndisponivel("a IA não aceitou escrever este relatório; escreva à mão", passageira=False)
+            blocos = blocos[trocas[-1] + 1:]
+        escrito = "".join(b.text for b in blocos if b.type == "text")
         try:
             dados = json.loads(escrito)
         except ValueError:
@@ -255,7 +286,7 @@ class MotorClaude:
         if not isinstance(dados, dict) or not isinstance(dados.get("relatorio"), list) \
                 or not isinstance(dados.get("pontos_a_enfrentar"), list):
             raise MotorIndisponivel(_FORMATO_INESPERADO)
-        return dados, str(getattr(mensagem, "model", "") or self.modelo)[:60]
+        return dados
 
     def _montar(self, processo: DadosProcesso, dados: dict, nomes: dict[int, str], modelo: str) -> dict:
         """Confere a resposta contra os autos enviados e monta a minuta. Nada do modelo vira estrutura: só texto."""

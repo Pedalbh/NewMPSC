@@ -160,6 +160,7 @@ def escrever_minuta(db: Session, processo_id: int, chave: str, motor: Motor) -> 
         estado, erro = "pronta", ""
     except MotorIndisponivel as e:
         erro, repetir = str(e)[:300], e.passageira
+        m = {"modelo": e.modelos} if e.modelos else None
     except Exception as e:   # noqa: BLE001
         _registro.error("escrita da minuta falhou: %s", type(e).__name__)   # sem conteúdo dos autos
     for tentativa in range(3):

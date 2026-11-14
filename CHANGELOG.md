@@ -2,6 +2,13 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.4.1] - 2026-11-14
+
+### Alterado
+- Se o modelo padrão (`claude-opus-5-5`) declinar o relatório antes de escrever, o próprio serviço passa o pedido ao `claude-opus-5`, e só a ele (cartão C14). Se declinar no meio da resposta, a escrita falha com aviso, para não juntar texto de quem declinou. Os outros modelos da lista seguem sem reserva.
+- O registro do pedido guarda os modelos que receberam os autos, também quando a escrita falha.
+- Pendente: confirmar com a chave da API (C8) que o `claude-opus-5` é reserva aceita para o `claude-opus-5-5`; se não for, todo pedido com o modelo padrão volta recusado.
+
 ## [0.4.0] - 2026-11-14
 
 ### Adicionado
