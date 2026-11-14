@@ -59,10 +59,12 @@ class ClienteFalso:
     def __init__(self, resposta=None, stop_reason="end_turn", erro=None, texto=None, antes=()):
         self.pedidos, self._erro, self._stop, self._antes = [], erro, stop_reason, list(antes)
         self._texto = json.dumps(resposta if resposta is not None else RESPOSTA) if texto is None else texto
-        self.messages = SimpleNamespace(stream=self._stream)
-        self.beta = SimpleNamespace(messages=SimpleNamespace(stream=self._stream))   # usado com a reserva (C14)
+        self.messages = SimpleNamespace(stream=lambda **p: self._stream(caminho="comum", **p))
+        self.beta = SimpleNamespace(messages=SimpleNamespace(   # usado com a reserva (C14)
+            stream=lambda **p: self._stream(caminho="beta", **p)))
 
-    def _stream(self, **pedido):
+    def _stream(self, caminho, **pedido):
+        self.caminhos = getattr(self, "caminhos", []) + [caminho]
         self.pedidos.append(pedido)
         if self._erro:
             raise self._erro
@@ -96,7 +98,7 @@ def test_pedido_leva_os_autos_como_dado_e_so_o_necessario():
     assert "autos.pdf" not in conteudo and "pericial" not in conteudo   # nome de arquivo não sai do servidor
     assert NUMERO not in conteudo                             # nem o número do processo
     assert pedido["output_config"]["format"]["type"] == "json_schema" and pedido["inference_geo"] == "us"
-    assert not {"fallbacks", "betas", "thinking", "temperature"} & set(pedido)
+    assert not {"fallbacks", "betas", "thinking", "temperature"} & set(pedido) and cliente.caminhos == ["comum"]
 
 
 def test_modelo_padrao_pede_ao_servico_a_reserva_so_no_claude_opus_5():
@@ -106,14 +108,33 @@ def test_modelo_padrao_pede_ao_servico_a_reserva_so_no_claude_opus_5():
     (pedido,) = cliente.pedidos
     assert pedido["model"] == "claude-opus-5-5" and pedido["fallbacks"] == [{"model": "claude-opus-5"}]
     assert pedido["betas"] == ["server-side-fallback-2026-07-01"] and pedido["inference_geo"] == "us"
+    assert cliente.caminhos == ["beta"]
     assert minuta["modelo"] == "modelo-que-respondeu"   # o registro guarda quem respondeu de fato
 
 
-def test_o_que_o_modelo_escreveu_antes_de_declinar_nao_entra_na_minuta():
-    antes = [SimpleNamespace(type="text", text='{"relatorio": [{"texto": "começo do primeiro'),
-             SimpleNamespace(type="fallback")]
-    minuta = MotorClaude(ClienteFalso(antes=antes)).elaborar_minuta(PROCESSO)
-    assert not any("começo do primeiro" in t for t in textos_de(minuta))
+def _troca():
+    return SimpleNamespace(type="fallback", from_=SimpleNamespace(model="claude-opus-5-5"),
+                           to=SimpleNamespace(model="claude-opus-5"))
+
+
+def test_recusa_antes_de_qualquer_texto_vale_a_resposta_da_reserva():
+    minuta = MotorClaude(ClienteFalso(antes=[_troca()])).elaborar_minuta(PROCESSO)
+    assert textos_de(minuta) and minuta["modelo"] == "claude-opus-5-5 > claude-opus-5"
+
+
+def test_recusa_no_meio_da_resposta_falha_sem_misturar_texto_de_quem_declinou():
+    """A reserva continua o texto parcial (forma real da API): juntar poria na minuta texto de quem declinou."""
+    antes = [SimpleNamespace(type="text", text='{"relatorio": [{"texto": "começo do primeiro'), _troca()]
+    with pytest.raises(MotorIndisponivel, match="não aceitou") as falha:
+        MotorClaude(ClienteFalso(antes=antes, texto='", "fontes": []}], "pontos_a_enfrentar": []}')
+                    ).elaborar_minuta(PROCESSO)
+    assert not falha.value.passageira and falha.value.modelos == "claude-opus-5-5 > claude-opus-5"
+
+
+def test_recusa_dos_dois_modelos_registra_quem_recebeu_os_autos():
+    with pytest.raises(MotorIndisponivel) as falha:
+        MotorClaude(ClienteFalso(antes=[_troca()], stop_reason="refusal")).elaborar_minuta(PROCESSO)
+    assert falha.value.modelos == "claude-opus-5-5 > claude-opus-5"
 
 
 def test_texto_dos_autos_nao_fecha_as_marcas_nem_forja_pagina():
@@ -704,3 +725,13 @@ def test_motor_de_demonstracao_nao_oferece_a_escrita(logada):
     assert "Escrever o relatório" not in html and "Minuta pronta" in logada.get("/").text
     logada.enviar("/processos/1/escrever")
     assert "o motor em uso não escreve a partir dos autos" in logada.get("/processos/1").text
+
+
+def test_falha_depois_da_troca_registra_os_dois_modelos(ana_ia, cliente_ia, banco_ia):
+    """Cartão C14: o registro diz quem recebeu os autos, também quando a escrita falha."""
+    enviar_autos(ana_ia)
+    cliente_ia._antes, cliente_ia._stop = [_troca()], "refusal"
+    ana_ia.enviar("/processos/1/escrever")
+    banco_ia.expire_all()
+    pedido = banco_ia.scalar(select(PedidoIA))
+    assert (pedido.resultado, pedido.modelo) == ("falhou", "claude-opus-5-5 > claude-opus-5")
