@@ -47,4 +47,6 @@ Só a decisão complexa ou sensível sobe para o titular, como cartão. O resto 
 
 **O coordenador decide e registra no PR** (seção "Decisões do coordenador"): desenho técnico, bibliotecas, limites numéricos provisórios, textos de tela, correções pedidas pelos revisores, atualização de dependência, e o merge quando os revisores aprovam e o CI está verde.
 
-Cada cartão traz: a pergunta numa frase, por que é do titular, as opções com o efeito de cada uma, a recomendação, e o que fica parado enquanto não há resposta. O coordenador não espera pelo cartão: segue no que não depende dele. Na dúvida sobre de que lado da régua algo cai, vira cartão.
+Cada cartão traz: a pergunta numa frase, por que é do titular, as opções com o efeito de cada uma e o que o coordenador executa se ela for escolhida ("Depois da decisão"), a recomendação, e o que fica parado enquanto não há resposta.
+
+**Depois da decisão, executa.** A resposta do titular a um cartão já é a ordem: o coordenador registra em `docs/CARTOES.md` e executa na hora o que a opção escolhida prevê, pelo caminho de sempre (ramo, PR, revisores, CI, merge), sem perguntar de novo. Só volta ao titular se a execução revelar fato que mude o efeito descrito (vira cartão novo) ou se um passo só puder ser dado por ele (chave, contrato), e nesse caso segue no resto. O coordenador não espera pelo cartão: segue no que não depende dele. Na dúvida sobre de que lado da régua algo cai, vira cartão.
