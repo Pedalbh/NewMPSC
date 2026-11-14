@@ -31,7 +31,7 @@
   const escrevendo = document.getElementById("escrevendo");
   if (escrevendo) {
     const texto = document.getElementById("espera-texto");
-    const inicio = new Date(escrevendo.dataset.inicio).getTime();
+    const inicio = Date.now() - 1000 * Number(escrevendo.dataset.decorrido || 0);
     let minutosDitos = 0;
     const olhar = async () => {
       try {

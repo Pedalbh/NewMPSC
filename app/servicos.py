@@ -1,6 +1,7 @@
 """Regras de trabalho: fila de processos, minutas e pauta. Toda consulta filtra pelo usuário."""
 import logging
 import re
+import secrets
 import threading
 import time
 from dataclasses import dataclass, field
@@ -72,11 +73,16 @@ def escrevendo(processo: Processo) -> bool:
     return bool(processo.tarefa and processo.tarefa.estado == "escrevendo")
 
 
+def _vencer(db: Session, tarefa: TarefaMinuta) -> None:
+    tarefa.estado, tarefa.erro, tarefa.vista = "falhou", "a escrita demorou demais; peça de novo", False
+    for pedido in db.scalars(select(PedidoIA).where(PedidoIA.chave == tarefa.chave, PedidoIA.resultado == "em curso")):
+        pedido.resultado = "falhou"
+
+
 def conferir_escrita(db: Session, processo: Processo) -> None:
     """Escrita que passou do prazo é dada como falha: nada fica preso em "escrevendo"."""
     if escrevendo(processo) and datetime.now() - processo.tarefa.iniciada_em > PRAZO_DA_ESCRITA:
-        processo.tarefa.estado, processo.tarefa.erro = "falhou", "a escrita demorou demais; peça de novo"
-        processo.tarefa.vista = False
+        _vencer(db, processo.tarefa)
         db.commit()
 
 
@@ -97,7 +103,7 @@ def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
     with _tranca_escrita:
         for tarefa in db.scalars(select(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo",
                                                              TarefaMinuta.iniciada_em < agora - PRAZO_DA_ESCRITA)):
-            tarefa.estado, tarefa.erro, tarefa.vista = "falhou", "a escrita demorou demais; peça de novo", False
+            _vencer(db, tarefa)
         db.flush()
         if escrevendo(processo):
             raise EscritaRecusada("a minuta deste processo já está sendo escrita")
@@ -114,8 +120,9 @@ def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
         if processo.tarefa:
             db.delete(processo.tarefa)
             db.flush()
-        processo.tarefa = TarefaMinuta()
-        db.add(PedidoIA(usuario_id=processo.usuario_id, processo_id=processo.id))
+        chave = secrets.token_hex(8)
+        processo.tarefa = TarefaMinuta(chave=chave)
+        db.add(PedidoIA(usuario_id=processo.usuario_id, processo_id=processo.id, chave=chave))
         try:
             db.commit()
         except IntegrityError:   # dois pedidos para o mesmo processo ao mesmo tempo, em servidores diferentes
@@ -124,13 +131,23 @@ def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
     return processo.tarefa
 
 
-def escrever_minuta(db: Session, processo_id: int, motor: Motor) -> None:
+def _minha_escrita(db: Session, processo_id: int, chave: str) -> Processo | None:
+    """O processo, se a escrita em curso nele ainda é a de `chave`. Lê do banco de novo: entre o pedido e a
+    resposta do motor a pessoa pode ter pedido outra escrita, ou o prazo pode ter vencido."""
+    db.expire_all()
+    processo = db.get(Processo, processo_id)
+    if processo is None or not escrevendo(processo) or processo.tarefa.chave != chave:
+        return None
+    return processo
+
+
+def escrever_minuta(db: Session, processo_id: int, chave: str, motor: Motor) -> None:
     """Roda fora da requisição: chama o motor com os autos e grava a minuta, ou o motivo da falha.
-    Qualquer que seja o erro, a tarefa sai de "escrevendo"."""
+    Qualquer que seja o erro, a tarefa sai de "escrevendo". Resultado de escrita que já não vale é descartado."""
     estado, erro, m, blocos = "falhou", "a escrita falhou por um erro inesperado; tente de novo", None, None
     try:
-        processo = db.get(Processo, processo_id)
-        if processo is None or not escrevendo(processo):
+        processo = _minha_escrita(db, processo_id, chave)
+        if processo is None:
             return
         dados = _dados(processo, com_autos=True)
         db.commit()   # devolve a conexão do banco enquanto o motor trabalha
@@ -144,17 +161,18 @@ def escrever_minuta(db: Session, processo_id: int, motor: Motor) -> None:
     for tentativa in range(3):
         try:
             db.rollback()
-            _fechar_escrita(db, processo_id, estado, erro, m, blocos)
+            _fechar_escrita(db, processo_id, chave, estado, erro, m, blocos)
             return
         except Exception as e:   # noqa: BLE001 (banco ocupado: tenta de novo; se não der, o prazo da escrita resolve)
             _registro.error("não gravou o fim da escrita (tentativa %d): %s", tentativa + 1, type(e).__name__)
             time.sleep(0.5 * (tentativa + 1))
 
 
-def _fechar_escrita(db: Session, processo_id: int, estado: str, erro: str, m: dict | None, blocos) -> None:
-    processo = db.get(Processo, processo_id)
-    if processo is None or not escrevendo(processo):
-        return
+def _fechar_escrita(db: Session, processo_id: int, chave: str, estado: str, erro: str, m: dict | None,
+                    blocos) -> None:
+    processo = _minha_escrita(db, processo_id, chave)
+    if processo is None:
+        return   # a escrita venceu ou foi trocada por outra: este resultado não entra
     tarefa = processo.tarefa
     if estado == "pronta":
         if processo.minuta:
@@ -163,9 +181,7 @@ def _fechar_escrita(db: Session, processo_id: int, estado: str, erro: str, m: di
         processo.minuta = Minuta(tipo=m["tipo"], blocos=blocos, motor=ORIGEM_IA)
         tarefa.pontos = [str(p) for p in m.get("pontos") or []]
     tarefa.estado, tarefa.erro, tarefa.vista = estado, erro, False
-    pedido = db.scalar(select(PedidoIA).where(PedidoIA.processo_id == processo_id, PedidoIA.resultado == "em curso")
-                       .order_by(PedidoIA.id.desc()))
-    if pedido:
+    for pedido in db.scalars(select(PedidoIA).where(PedidoIA.chave == chave, PedidoIA.resultado == "em curso")):
         pedido.resultado, pedido.modelo = estado, str((m or {}).get("modelo") or "")[:60]
     db.commit()
 

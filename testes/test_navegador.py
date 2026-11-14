@@ -266,7 +266,9 @@ def test_relatorio_escrito_pelo_motor_de_ia(endereco_ia, pagina):
     pg.locator("#estado-salvar", has_text="Salva às").wait_for()
     pg.reload()
     assert pg.get_by_role("button", name="Escrever de novo").count() == 0
-    pg.get_by_text("Escrever o relatório de novo").click()
+    recolhido = pg.locator("summary", has_text="Escrever o relatório de novo")
+    assert recolhido.evaluate("e => getComputedStyle(e).display") == "list-item"   # com o triângulo de abrir
+    recolhido.click()
     sync_api.expect(pg.get_by_role("button", name="Apagar minhas alterações e escrever")).to_be_visible()
 
     # a mesa mostra o estado do relatório

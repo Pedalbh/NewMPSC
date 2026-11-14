@@ -11,6 +11,7 @@
   --ok: #0B6B3A; --ok-fundo: #E2F3E9; --atencao: #8F4000; --atencao-fundo: #FFEBD5;
   --erro: #9E1B1B; --erro-fundo: #FDE7E7; --info: #1D4F91; --info-fundo: #E3EDFA;
   --papel: #FFFFFF; --tinta-papel: #111111;
+  --marca-papel-fundo: #FFEBD5; --marca-papel-tinta: #8F4000;   /* destaque sobre o papel, claro nos dois temas */
   --raio-p: 8px; --raio-m: 14px; --raio-g: 22px; --raio-total: 999px;
   --e1: 4px; --e2: 8px; --e3: 12px; --e4: 16px; --e5: 24px; --e6: 32px; --e7: 48px;
   --sombra: 0 1px 2px rgb(20 19 18 / .04), 0 8px 24px rgb(20 19 18 / .06);
@@ -110,7 +111,7 @@ main.estreito { max-width: 640px; }
 .campo :where(input, select, textarea) { font: 400 15px/22px var(--fonte); min-height: 44px; padding: 10px 12px; border: 1px solid var(--linha-forte); border-radius: var(--raio-p); background: var(--superficie); color: var(--tinta); width: 100%; }
 .campo textarea { resize: vertical; font-variant-numeric: tabular-nums; }
 .campo input:disabled { background: var(--relevo); color: var(--tinta-fraca); border-color: var(--linha); }
-details > summary { cursor: pointer; font-weight: 500; color: var(--tinta-fraca); padding: 6px 0; }
+details > summary { cursor: pointer; font-weight: 500; color: var(--tinta-fraca); padding: var(--e3) 0; min-height: 44px; box-sizing: border-box; }
 details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .seletor { display: inline-flex; background: var(--relevo); border-radius: var(--raio-total); padding: 3px; }
 .seletor a { padding: 5px 14px; border-radius: var(--raio-total); font-weight: 500; font-size: 14px; color: var(--tinta-fraca); }
@@ -163,9 +164,8 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .barra span { display: block; width: 40%; height: 100%; border-radius: var(--raio-total); background: var(--primaria); animation: vai-e-vem 1.6s ease-in-out infinite alternate; }
 @keyframes vai-e-vem { from { transform: translateX(-20%); } to { transform: translateX(170%); } }
 @media (prefers-reduced-motion: reduce) { .barra span { animation: none; width: 100%; opacity: .5; } }
-::highlight(marca) { background: var(--atencao-fundo); color: var(--atencao); }   /* trechos entre colchetes a completar */
+::highlight(marca) { background: var(--marca-papel-fundo); color: var(--marca-papel-tinta); }   /* trechos entre colchetes a completar */
 #resultado-escrita:focus { outline: none; }
-details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; }
 .cabecalho-proc { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--e4); }
 .cabecalho-proc h1 { margin: 2px 0; }
 .folha { background: var(--papel); color: var(--tinta-papel); border: 1px solid var(--linha); border-radius: 4px; box-shadow: var(--sombra); max-width: 794px; margin: 0 auto;

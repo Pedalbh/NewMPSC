@@ -44,6 +44,11 @@ class Fluxo:
     def __exit__(self, *_):
         return False
 
+    def __iter__(self):
+        return iter(self.eventos)
+
+    eventos: tuple = ("pedaço",)
+
     def get_final_message(self):
         return self._mensagem
 
@@ -170,6 +175,63 @@ def test_paragrafo_sem_pagina_com_citacao_ou_com_pedido_sai_marcado():
     assert "Texto invertido e limpo. (autos, p. 1)" in textos   # sem caractere que inverte a direção do texto
 
 
+@pytest.mark.parametrize("texto, marca", [
+    ("O Ministério Público pede o arquivamento do feito.", "não é relatório"),
+    ("Isto posto, o arquivamento é a medida, com base no CPP, artigo vinte e oito.", "não é relatório"),
+    ("Em face do exposto, promove-se o arquivamento.", "não é relatório"),
+    ("Conforme a Lei 11.343/2006, a conduta é atípica.", "citação"),
+    ("O Tema 1.234 do Supremo trata do assunto.", "citação"),
+    ("A Lei nº 9.099/95 prevê a transação.", "citação"),
+    ("O Superior Tribunal de Justiça já decidiu assim.", "citação"),
+])
+def test_formas_comuns_de_citacao_e_de_pedido_saem_marcadas(texto, marca):
+    """Defeito achado na revisão: "pede", "isto posto", "Lei 11.343" e "Tema do Supremo" passavam sem marca."""
+    resposta = {"relatorio": [{"texto": texto, "fontes": [{"arquivo": 1, "pagina": 1}]}], "pontos_a_enfrentar": [texto]}
+    m = escrever(resposta)
+    assert any(t.startswith("[CONFERIR:") and f"[CONFERIR: {marca}]" in t for t in textos_de(m))
+    if marca == "citação":
+        assert m["pontos"][0].startswith("[CONFERIR: citação]")
+
+
+@pytest.mark.parametrize("texto", [
+    "A defesa requereu a liberdade provisória.",
+    "A defesa requer a absolvição.",
+    "O requerimento foi juntado aos autos.",
+    "A vítima pede a devolução do objeto.",
+])
+def test_pedido_de_outra_parte_e_fato_dos_autos_e_nao_e_marcado(texto):
+    """Defeito achado na revisão: "requereu" e "requerimento" marcavam o relatório normal."""
+    resposta = {"relatorio": [{"texto": texto, "fontes": [{"arquivo": 1, "pagina": 1}]}], "pontos_a_enfrentar": []}
+    assert f"{texto} (autos, p. 1)" in textos_de(escrever(resposta))
+
+
+def test_sinais_que_o_modelo_copia_dos_autos_voltam_ao_normal():
+    resposta = {"relatorio": [{"texto": "O laudo registra valor &lt; R$ 100 &amp; nada mais.",
+                               "fontes": [{"arquivo": 1, "pagina": 1}]}], "pontos_a_enfrentar": ["A &gt; B?"]}
+    m = escrever(resposta)
+    assert "O laudo registra valor < R$ 100 & nada mais. (autos, p. 1)" in textos_de(m) and m["pontos"] == ["A > B?"]
+
+
+def test_rotulo_do_arquivo_e_curto_sem_reticencias_e_distingue_nomes_iguais():
+    """Defeito achado na revisão: nome longo ocupava duas linhas por citação, e nomes iguais ficavam indistintos."""
+    longo = "autos-eproc-evento12-DENUNCIA1-0000102-00.2026.8.24.0000.pdf"
+    autos = (PaginaDosAutos(longo, 1, "a", 1), PaginaDosAutos("laudo.pdf", 1, "b", 2),
+             PaginaDosAutos("laudo.pdf", 1, "c", 3))
+    resposta = {"relatorio": [{"texto": "Fato.", "fontes": [{"arquivo": n, "pagina": 1} for n in (1, 2, 3)]}],
+                "pontos_a_enfrentar": []}
+    (texto,) = [t for t in textos_de(escrever(resposta, DadosProcesso(NUMERO, autos=autos))) if t.startswith("Fato.")]
+    assert texto == "Fato. (autos-eproc-evento12, p. 1; 2º arquivo, laudo, p. 1; 3º arquivo, laudo, p. 1)"
+
+
+def test_resposta_que_nao_termina_tem_teto_de_tempo(monkeypatch):
+    """Defeito achado na revisão: o tempo-limite valia entre pedaços, e a resposta inteira podia não acabar."""
+    relogio = iter(range(0, 10_000, 400))
+    monkeypatch.setattr(motor_claude.time, "monotonic", lambda: next(relogio))
+    monkeypatch.setattr(Fluxo, "eventos", ("pedaço",) * 5)
+    with pytest.raises(MotorIndisponivel, match="demorou demais"):
+        escrever()
+
+
 def test_ordem_escondida_nos_autos_nao_muda_a_estrutura_da_minuta():
     resposta = {"relatorio": [{"texto": "Narra-se o fato.", "fontes": [{"arquivo": 1, "pagina": 1}]}],
                 "pontos_a_enfrentar": [], "pedidos": ["a absolvição sumária"], "tipo": "Alvará de soltura"}
@@ -259,11 +321,17 @@ def test_modelo_so_da_lista_e_cliente_com_destino_e_chave_fixos(monkeypatch):
     with pytest.raises(RuntimeError, match="ANTHROPIC_API_KEY"):
         criar_motor("claude")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "chave-ficticia-de-teste")
-    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://outro-destino.exemplo.invalid")
+    # Defeito achado na revisão: uma variável de ambiente trocava a credencial e mandava os autos a outra conta.
+    for variavel, valor in (("ANTHROPIC_CUSTOM_HEADERS", "authorization: Bearer OUTRA"),
+                            ("ANTHROPIC_AUTH_TOKEN", "outro"), ("ANTHROPIC_BASE_URL", "https://desvio.exemplo.invalid")):
+        monkeypatch.setenv(variavel, valor)
+        with pytest.raises(RuntimeError, match=variavel):
+            criar_motor("claude")
+        monkeypatch.delenv(variavel)
     logging.getLogger("anthropic").setLevel(logging.DEBUG)
     motor = criar_motor("claude", "claude-haiku-5-5")
     assert motor.usa_autos and motor.modelo == "claude-haiku-5-5" and not criar_motor("demo").usa_autos
-    assert str(motor._cliente.base_url).startswith(motor_claude.ENDERECO)   # o ambiente não desvia o destino
+    assert str(motor._cliente.base_url).startswith(motor_claude.ENDERECO)
     assert motor._cliente.max_retries == 1 and motor._cliente.timeout == motor_claude.TEMPO
     assert logging.getLogger("anthropic").level == logging.WARNING           # em DEBUG, os autos iriam ao registro
     for fora in ("claude-fable-5-2", "qualquer-coisa"):
@@ -412,6 +480,14 @@ def test_falha_do_servico_mantem_a_minuta_explica_e_some_quando_a_pessoa_segue_a
     assert "O relatório não foi escrito" not in html and "Texto meu." in html
 
 
+def test_falha_que_nao_e_passageira_nao_oferece_tentar_de_novo(ana_ia, cliente_ia):
+    enviar_autos(ana_ia)
+    cliente_ia._erro = _erro_da_api(anthropic.AuthenticationError, 401)
+    ana_ia.enviar("/processos/1/escrever")
+    html = ana_ia.get("/processos/1").text
+    assert "o serviço de IA não está configurado. Avise o suporte do NewMPSC" in html and "Tentar de novo" not in html
+
+
 def test_erro_inesperado_no_motor_nao_deixa_a_escrita_presa(ana_ia, cliente_ia):
     enviar_autos(ana_ia)
     cliente_ia._erro = ZeroDivisionError("falha qualquer")
@@ -424,13 +500,46 @@ def test_minuta_editada_so_e_substituida_com_confirmacao(ana_ia, cliente_ia):
     """Defeito achado na revisão: pedir de novo apagava as alterações do promotor sem perguntar."""
     enviar_autos(ana_ia)
     salvar(ana_ia)
+    # minuta em branco que a pessoa já mexeu: o botão principal continua à vista, com o aviso do que se perde
     html = ana_ia.get("/processos/1").text
-    assert "Apagar minhas alterações e escrever" in html and 'name="confirmo" value="1"' in html
-    ana_ia.enviar("/processos/1/escrever")
+    assert 'btn principal largo" type="submit">Escrever o relatório<' in html and "de novo" not in html
+    assert 'name="confirmo" value="1"' in html and "O que você escreveu na folha será substituído" in html
+    ana_ia.enviar("/processos/1/escrever")   # um pedido sem a confirmação não passa
     assert "confirme que as suas alterações na minuta podem ser apagadas" in ana_ia.get("/processos/1").text
     assert cliente_ia.pedidos == [] and "Texto meu." in ana_ia.get("/processos/1").text
     ana_ia.enviar("/processos/1/escrever", {"confirmo": "1"})
     assert len(cliente_ia.pedidos) == 1 and "Texto meu." not in ana_ia.get("/processos/1").text
+    # relatório de IA que a pessoa editou: escrever de novo fica recolhido, com botão de perigo
+    salvar(ana_ia, "Relatório revisto por mim.")
+    html = ana_ia.get("/processos/1").text
+    assert "Escrever o relatório de novo" in html and "Apagar minhas alterações e escrever" in html
+    assert 'btn principal largo" type="submit">Escrever' not in html
+    ana_ia.enviar("/processos/1/escrever")
+    assert len(cliente_ia.pedidos) == 1 and "Relatório revisto por mim." in ana_ia.get("/processos/1").text
+
+
+def test_resultado_atrasado_nao_apaga_edicao_nem_passa_por_cima_de_escrita_nova(cliente_ia):
+    """Defeito achado na revisão: uma escrita vencida que terminava depois gravava sobre a nova e apagava a edição."""
+    fila = []
+    app = nova_app(cliente_ia, em_segundo_plano=lambda tarefa, *a: fila.append((tarefa, a)))
+    c = entrar(app)
+    enviar_autos(c)
+    c.enviar("/processos/1/escrever")                                   # pedido 1 fica preso no motor
+    with app.state.Sessao() as db:
+        db.scalar(select(TarefaMinuta)).iniciada_em = datetime.now() - servicos.PRAZO_DA_ESCRITA - timedelta(seconds=5)
+        db.commit()
+    assert c.get("/api/processos/1/escrita").json() == {"estado": "falhou"}
+    c.enviar("/processos/1/escrever")                                   # pedido 2
+    fila[1][0](*fila[1][1])
+    assert c.get("/api/processos/1/escrita").json() == {"estado": "pronta"}
+    salvar(c, "Edição minha depois do relatório.")
+    fila[0][0](*fila[0][1])                                             # o pedido 1 termina só agora
+    html = c.get("/processos/1").text
+    assert "Edição minha depois do relatório." in html and len(cliente_ia.pedidos) == 1
+    with app.state.Sessao() as db:
+        assert db.scalars(select(PedidoIA.resultado).order_by(PedidoIA.id)).all() == ["falhou", "pronta"]
+        assert db.get(Processo, 1).minuta.editada
+    c.__exit__(None, None, None)
 
 
 def test_enquanto_escreve_a_tela_espera_e_nada_muda_a_minuta_nem_os_autos(parada):
@@ -440,7 +549,7 @@ def test_enquanto_escreve_a_tela_espera_e_nada_muda_a_minuta_nem_os_autos(parada
     enviar_autos(c, processo=2)
     assert c.enviar("/processos/1/escrever").status_code == 303
     html = c.get("/processos/1").text
-    assert 'id="escrevendo"' in html and 'id="folha"' not in html and "data-inicio=" in html
+    assert 'id="escrevendo"' in html and 'id="folha"' not in html and 'data-decorrido="0"' in html
     assert "Aguarde o relatório para baixar ou copiar." in html
     for ausente in ('id="baixar-docx"', 'id="copiar"', 'id="autos-pdf"', ">Remover<", "Voltar à minuta em branco"):
         assert ausente not in html
@@ -449,6 +558,8 @@ def test_enquanto_escreve_a_tela_espera_e_nada_muda_a_minuta_nem_os_autos(parada
     r = salvar(c, "x")
     assert r.status_code == 422 and "sendo escrita" in r.json()["erro"]
     assert c.enviar("/processos/1/refazer").status_code == 409
+    # Defeito achado na revisão: os endereços de baixar e copiar entregavam a minuta antiga durante a escrita.
+    assert c.get("/processos/1/minuta.docx").status_code == 409 and c.get("/processos/1/minuta.txt").status_code == 409
     assert c.enviar("/processos/1/autos/1/remover").status_code == 409
     enviar_autos(c, nome="outro.pdf")
     c.enviar("/processos/1/escrever")       # duplo clique: o segundo pedido é recusado, sem erro

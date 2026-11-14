@@ -79,6 +79,7 @@ class TarefaMinuta(Base):
     iniciada_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     pontos: Mapped[list] = mapped_column(JSON, default=list)       # pontos a enfrentar: lista de conferência na tela
     vista: Mapped[bool] = mapped_column(Boolean, default=False)    # o resultado já foi mostrado ao usuário
+    chave: Mapped[str] = mapped_column(String(16), default="")     # distingue esta escrita de outra do mesmo processo
     processo: Mapped[Processo] = relationship(back_populates="tarefa")
 
 
@@ -92,6 +93,7 @@ class PedidoIA(Base):
     feito_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
     modelo: Mapped[str] = mapped_column(String(60), default="")
     resultado: Mapped[str] = mapped_column(String(20), default="em curso")   # em curso | pronta | falhou
+    chave: Mapped[str] = mapped_column(String(16), default="", index=True)    # a mesma da tarefa que gerou o pedido
 
 
 class ArquivoAutos(Base):

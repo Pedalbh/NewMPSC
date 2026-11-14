@@ -266,8 +266,11 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         p = db.merge(p)
         servicos.conferir_escrita(db, p)
         resultado_novo = servicos.marcar_resultado_como_visto(db, p)
+        esperando = servicos.escrevendo(p)
+        # há quanto tempo escreve, contado no servidor: a tela não depende do fuso do navegador
+        decorrido = int((datetime.now() - p.tarefa.iniciada_em).total_seconds()) if esperando else 0
         return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta,
-                    escrevendo=servicos.escrevendo(p), resultado_novo=resultado_novo)
+                    escrevendo=esperando, resultado_novo=resultado_novo, decorrido=max(decorrido, 0))
 
     def _paginas(n: int, lidas: bool = False) -> str:
         return f"1 página{' lida' if lidas else ''}" if n == 1 else f"{n} páginas{' lidas' if lidas else ''}"
@@ -355,20 +358,21 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
                else "Minuta refeita pelo motor.")
         return voltar(f"/processos/{p.id}")
 
-    def _escrever(processo_id: int) -> None:
+    def _escrever(processo_id: int, chave: str) -> None:
         with Sessao() as db:
-            servicos.escrever_minuta(db, processo_id, motor)
+            servicos.escrever_minuta(db, processo_id, chave, motor)
 
     @app.post("/processos/{processo_id}/escrever", dependencies=[Depends(exigir_csrf)])
     async def escrever(request: Request, p=Depends(meu_processo), db=Depends(banco)):
         """Pede ao motor de IA o relatório a partir dos autos. A escrita roda fora da requisição."""
         confirmado = (await request.form()).get("confirmo") == "1"
-        try:
-            servicos.pedir_escrita(db, db.merge(p), motor, config.dados_ficticios, confirmado)
+        try:   # fora do laço de eventos: o pedido espera uma tranca e o banco
+            tarefa = await run_in_threadpool(servicos.pedir_escrita, db, db.merge(p), motor, config.dados_ficticios,
+                                             confirmado)
         except servicos.EscritaRecusada as e:
             avisar(request, "erro", f"O relatório não foi pedido: {e}.")
             return voltar(f"/processos/{p.id}")
-        em_segundo_plano(_escrever, p.id)
+        em_segundo_plano(_escrever, p.id, tarefa.chave)
         return voltar(f"/processos/{p.id}")
 
     @app.get("/api/processos/{processo_id}/escrita")
@@ -386,17 +390,23 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             raise HTTPException(422, str(e)) from None
         return {"salva_em": m.atualizada_em.strftime("%H:%M"), "paragrafos": len(m.blocos)}
 
+    def _sem_escrita_em_curso(p) -> None:
+        if servicos.escrevendo(p):
+            raise HTTPException(409, "O relatório está sendo escrito. Espere terminar para baixar a minuta.")
+
     def _nome_arquivo(p, extensao: str) -> str:
         return quote(f"minuta-{p.numero}.{extensao}")
 
     @app.get("/processos/{processo_id}/minuta.docx")
     def baixar_docx(p=Depends(meu_processo)):
+        _sem_escrita_em_curso(p)
         return Response(documento.docx(p.minuta.blocos), headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{_nome_arquivo(p, 'docx')}"},
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
     @app.get("/processos/{processo_id}/minuta.txt")
     def baixar_texto(p=Depends(meu_processo)):
+        _sem_escrita_em_curso(p)
         return PlainTextResponse(documento.texto_simples(p.minuta.blocos))
 
     # ------------------------------------------------------------------ audiências

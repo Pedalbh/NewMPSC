@@ -2,7 +2,6 @@
 {% block titulo %}{{ p.numero }} · NewMPSC{% endblock %}
 {% block conteudo %}
 {% set de_ia = minuta.motor == origem_ia %}
-{% set em_branco = minuta.motor == origem_em_branco and not minuta.editada %}
 <nav class="trilha" aria-label="Você está em"><a class="elo" href="/">‹ Processos</a></nav>
 <section class="cabecalho-proc">
   <div>
@@ -20,7 +19,7 @@
 <div class="grade">
   <section class="principal pilha" aria-label="Minuta">
     {% if escrevendo %}
-    <div class="cartao espera" id="escrevendo" data-acompanhar="/api/processos/{{ p.id }}/escrita" data-inicio="{{ p.tarefa.iniciada_em.isoformat() }}">
+    <div class="cartao espera" id="escrevendo" data-acompanhar="/api/processos/{{ p.id }}/escrita" data-decorrido="{{ decorrido }}">
       <p class="vazio-titulo">Escrevendo o relatório a partir dos autos…</p>
       <div class="barra" aria-hidden="true"><span></span></div>
       <p class="fraco" id="espera-texto" role="status" aria-live="polite">Costuma levar de um a três minutos. Pode sair desta tela; o relatório fica aqui quando terminar.</p>
@@ -30,7 +29,7 @@
     {% if p.tarefa and p.tarefa.estado == 'falhou' %}
     <div class="aviso erro" id="resultado-escrita" role="status" tabindex="-1" {% if resultado_novo %}data-foco{% endif %}>
       <p>O relatório não foi escrito: {{ p.tarefa.erro }}. A minuta abaixo não mudou.</p>
-      {% if ia and p.autos and not minuta.editada %}
+      {% if ia and p.autos and not minuta.editada and 'Avise' not in p.tarefa.erro %}
       <form method="post" action="/processos/{{ p.id }}/escrever">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn" type="submit">Tentar de novo</button>
@@ -58,7 +57,7 @@
       {% if escrevendo %}
       <p class="fraco">Aguarde o relatório para baixar ou copiar.</p>
       {% else %}
-      <a class="btn {{ 'principal' if not (ia and em_branco) }} largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
+      <a class="btn {{ 'principal' if not (ia and minuta.motor == origem_em_branco) }} largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
       <button class="btn largo" type="button" id="copiar" data-origem="/processos/{{ p.id }}/minuta.txt">Copiar texto</button>
       <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
       {% if p.tarefa and p.tarefa.estado == 'pronta' and p.tarefa.pontos and de_ia %}
@@ -115,7 +114,14 @@
         <noscript><button class="btn largo" type="submit">Enviar PDF</button></noscript>
       </form>
       {% if ia and p.autos %}
-      {% if minuta.editada %}
+      {% if minuta.editada and not de_ia %}
+      <form method="post" action="/processos/{{ p.id }}/escrever">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <input type="hidden" name="confirmo" value="1">
+        <button class="btn principal largo" type="submit">Escrever o relatório</button>
+      </form>
+      <p class="fraco pequeno">O que você escreveu na folha será substituído pelo relatório.</p>
+      {% elif minuta.editada %}
       <details>
         <summary>Escrever o relatório de novo</summary>
         <form method="post" action="/processos/{{ p.id }}/escrever" class="pilha">

@@ -7,10 +7,12 @@ campo para fundamentação jurídica nem para pedido: a resposta do modelo não 
 O texto dos autos é dado, nunca instrução: vai entre marcas que ele não consegue fechar, e o que o modelo devolve é
 conferido. A conferência de página confirma que a página citada foi enviada; não confirma o que ela diz. Por isso
 todo relatório sai como "a conferir", e parágrafo com citação jurídica ou com fórmula de pedido fica marcado."""
+import html
 import json
 import logging
 import os
 import re
+import time
 
 import anthropic
 
@@ -22,15 +24,25 @@ MODELO_PADRAO = "claude-opus-5-5"
 MODELOS = (MODELO_PADRAO, "claude-sonnet-5-5", "claude-haiku-5-5")
 ENDERECO = "https://api.anthropic.com"
 REGIAO = "us"                # onde o modelo processa; sem isso o padrão do serviço é qualquer região
-TEMPO = 240                  # segundos por tentativa
+TEMPO = 240                  # segundos sem receber nada do serviço, por tentativa
+TEMPO_TOTAL = 600            # segundos para a resposta inteira; menor que o prazo da escrita no servidor
+# o que mais houver no ambiente que mude o destino ou a credencial impede a partida, em vez de valer em silêncio
+VARIAVEIS_RECUSADAS = ("ANTHROPIC_CUSTOM_HEADERS", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL")
 MAX_CARACTERES = 1_500_000   # texto dos autos numa só chamada; acima disso a pessoa escolhe o que enviar
 MAX_SAIDA = 16_000           # tokens da resposta
 MAX_PARAGRAFOS, MAX_PONTOS, MAX_TEXTO, MAX_FONTES = 40, 12, 1_500, 12
 SEM_PAGINA, CITACAO, NAO_RELATORIO = "[CONFERIR: sem página]", "[CONFERIR: citação]", "[CONFERIR: não é relatório]"
-_CITACAO = re.compile(r"\b(art(igo)?s?\.?\s*\d|lei\s+(n|complementar|federal|estadual)|s[úu]mula|STF|STJ|TJ[A-Z]{2}|"
-                      r"HC\s*n?\.?\s*\d|REsp|RE\s+\d|código\s+(penal|de\s+processo))", re.IGNORECASE)
-_PEDIDO = re.compile(r"\b(requer|pugna|postula|opina\s+pel|manifesta-se\s+pel|(ante|diante)\s+do\s+exposto)",
-                     re.IGNORECASE)
+# Formas comuns de citação jurídica e de fórmula de pedido. Não pegam todas: a garantia é o "a conferir" da minuta.
+_CITACAO = re.compile(
+    r"\b(art(igo)?s?\.?\s*\d|artigo\s+\w+|lei\s*(n\.?\s*[ºo°]?|complementar|federal|estadual)?\s*\d|s[úu]mula|"
+    r"tema\s+(n\.?\s*[ºo°]?\s*)?\d|STF|STJ|TJ[A-Z]{2}|TRF|supremo|superior\s+tribunal|tribunal\s+de\s+justi[çc]a|"
+    r"C(P|PP|F|TB|PM|PPM)\b|HC\s*n?\.?\s*\d|REsp|RE\s+\d|c[óo]digo\s+(penal|de\s+processo|de\s+tr[âa]nsito)|"
+    r"constitui[çc][ãa]o\s+federal|jurisprud[êe]ncia|precedente)", re.IGNORECASE)
+# fórmula de fecho, ou o Ministério Público pedindo: "a defesa requereu" é fato dos autos e não é marcado
+_PEDIDO = re.compile(
+    r"\b((ante|diante)\s+do\s+exposto|em\s+face\s+do\s+exposto|isto\s+posto|pelo\s+exposto|"
+    r"(minist[ée]rio\s+p[úu]blico|parquet|promotor(a)?(\s+de\s+justi[çc]a)?)\s+"
+    r"(requer|pede|pugna|postula|opina|manifesta-se|promove)\b|(promove|requer|pugna|opina)-se)", re.IGNORECASE)
 
 SISTEMA = """Você ajuda um Promotor de Justiça do Ministério Público de Santa Catarina a preparar uma manifestação \
 num processo criminal. Seu trabalho é só a parte de fato: resumir o que os autos dizem e apontar o que o promotor \
@@ -91,6 +103,9 @@ def criar_cliente() -> anthropic.Anthropic:
     chave = os.environ.get("ANTHROPIC_API_KEY", "")
     if not chave:
         raise RuntimeError("ANTHROPIC_API_KEY é obrigatória para o motor claude")
+    for variavel in VARIAVEIS_RECUSADAS:
+        if os.environ.get(variavel):
+            raise RuntimeError(f"{variavel} não pode estar definida: o destino e a credencial da IA são fixos")
     for registrador in ("anthropic", "httpx2", "httpcore2"):   # em DEBUG, o registro traria o texto dos autos
         logging.getLogger(registrador).setLevel(logging.WARNING)
     return anthropic.Anthropic(api_key=chave, base_url=ENDERECO, timeout=TEMPO, max_retries=1,
@@ -117,8 +132,19 @@ def _autos_em_texto(autos: tuple[PaginaDosAutos, ...]) -> tuple[str, dict[int, s
 
 
 def _rotulo(nome: str) -> str:
+    """Nome curto do arquivo para a citação: sem extensão e cortado numa palavra inteira."""
     nome = re.sub(r"\.pdf$", "", nome, flags=re.IGNORECASE).strip() or "autos"
-    return nome if len(nome) <= 40 else nome[:39] + "…"
+    if len(nome) <= 24:
+        return nome
+    inteiro = re.match(r"(.{8,23})[\s\-_.,;]", nome)
+    return (inteiro.group(1) if inteiro else nome[:24]).rstrip(" -_.,;")
+
+
+def _rotulos(nomes: dict[int, str]) -> dict[int, str]:
+    """Rótulo de cada arquivo. Os que ficariam iguais ganham a posição na lista de autos, para não confundir."""
+    curtos = {numero: _rotulo(nome) for numero, nome in nomes.items()}
+    todos = list(curtos.values())
+    return {n: f"{n}º arquivo, {r}" if todos.count(r) > 1 else r for n, r in curtos.items()}
 
 
 def _paginas(paginas: list[int]) -> str:
@@ -138,9 +164,10 @@ def _referencia(fontes: list[tuple[int, int]], nomes: dict[int, str]) -> str:
     for arquivo, pagina in fontes:
         por_arquivo.setdefault(arquivo, []).append(pagina)
     partes = []
+    rotulos = _rotulos(nomes)
     for arquivo, paginas in por_arquivo.items():
         onde = _paginas(sorted(set(paginas)))
-        partes.append(onde if len(nomes) == 1 else f"{_rotulo(nomes[arquivo])}, {onde}")
+        partes.append(onde if len(nomes) == 1 else f"{rotulos[arquivo]}, {onde}")
     return "(" + "; ".join(partes) + ")"
 
 
@@ -182,6 +209,10 @@ class MotorClaude:
                 output_config={"effort": "high", "format": FORMATO},
                 inference_geo=REGIAO,
             ) as fluxo:
+                limite = time.monotonic() + TEMPO_TOTAL
+                for _ in fluxo:   # a resposta chega aos pedaços; o teto vale para ela inteira
+                    if time.monotonic() > limite:
+                        raise MotorIndisponivel("a IA demorou demais para responder; tente de novo")
                 mensagem = fluxo.get_final_message()
         except anthropic.AuthenticationError:
             raise MotorIndisponivel("o serviço de IA não está configurado. Avise o suporte do NewMPSC") from None
@@ -223,7 +254,7 @@ class MotorClaude:
         for item in dados["relatorio"][:MAX_PARAGRAFOS]:
             if not isinstance(item, dict) or not isinstance(item.get("texto"), str):
                 continue
-            texto = limpar(item["texto"])[:MAX_TEXTO]
+            texto = limpar(html.unescape(item["texto"]))[:MAX_TEXTO]
             if not texto:
                 continue
             fontes = []
@@ -239,7 +270,7 @@ class MotorClaude:
             raise MotorIndisponivel("a IA não devolveu relatório; tente de novo")
         pontos = []
         for ponto in dados["pontos_a_enfrentar"][:MAX_PONTOS]:
-            ponto = limpar(ponto)[:MAX_TEXTO] if isinstance(ponto, str) else ""
+            ponto = limpar(html.unescape(ponto))[:MAX_TEXTO] if isinstance(ponto, str) else ""
             if ponto:
                 pontos.append((CITACAO + " " if _CITACAO.search(ponto) else "") + ponto)
         abertura = {"secao": "", "texto": "O Ministério Público do Estado de Santa Catarina, por seu Promotor de "
