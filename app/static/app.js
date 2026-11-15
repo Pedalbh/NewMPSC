@@ -73,6 +73,16 @@
     }
     CSS.highlights.set("marca", new Highlight(...trechos));
   };
+  // enviar ao SIG: a contagem dos trechos a completar acompanha a digitação, e o envio só é a ação principal sem eles
+  const contar = () => {
+    const aviso = document.getElementById("trechos");
+    const enviar = document.getElementById("enviar-sig");
+    if (!aviso || !enviar) return;
+    const n = pendentes();
+    aviso.hidden = !n;
+    aviso.textContent = n === 1 ? "1 trecho entre colchetes a completar" : n + " trechos entre colchetes a completar";
+    enviar.classList.toggle("principal", !n && "principal" in enviar.dataset);
+  };
   const podeSair = (acao) => {
     const n = pendentes();
     return !n || window.confirm((n === 1 ? "Ainda há 1 trecho entre colchetes a completar. "
@@ -102,7 +112,7 @@
       if (pendente) salvar();
     };
     const agendar = () => {
-      marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar();
+      marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar(); contar();
     };
 
     folha.addEventListener("input", agendar);
@@ -149,8 +159,13 @@
       if (formulario.dataset.pronto) return;
       e.preventDefault();
       if (!podeSair("Enviar ao SIG")) return;
-      if (estado.textContent === "Alterada") { clearTimeout(espera); await salvar(); }
-      if (estado.classList.contains("erro")) return;   // não salvou: não envia a versão antiga
+      const botao = formulario.querySelector("button");
+      botao.disabled = true;   // um envio só, mesmo com clique duplo
+      clearTimeout(espera);
+      if (estado.textContent === "Alterada") salvar();
+      // espera o salvamento em curso e o que ficou pendente atrás dele: o rascunho leva o que está na tela
+      while (salvando || pendente) await new Promise((r) => setTimeout(r, 50));
+      if (estado.classList.contains("erro")) { botao.disabled = false; return; }   // não salvou: não envia
       formulario.dataset.pronto = "1"; formulario.submit();
     });
   }

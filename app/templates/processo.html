@@ -12,7 +12,7 @@
   <div class="proc-selos">
     {% if p.reu_preso %}<span class="selo erro">Réu preso</span>{% endif %}
     {% if p.vista %}<span class="selo {{ 'atencao' if p.vista | lower == 'urgente' }}">{{ p.vista }}</span>{% endif %}
-    {% if p.entrega %}<span class="selo ok">No SIG, para assinar</span>
+    {% if p.entrega %}<span class="selo atencao">Falta assinar no SIG</span>
     {% elif p.situacao == 'concluido' %}<span class="selo ok">Concluído</span>{% endif %}
   </div>
 </section>
@@ -61,13 +61,15 @@
       {% set em_branco = ia and minuta.motor == origem_em_branco %}
       {% if sig_direto %}
       {% if p.entrega %}
-      <p class="pequeno" id="no-sig">No SIG simulado como rascunho desde {{ p.entrega.recebida_em | data }} às {{ p.entrega.recebida_em | hora }} (recibo {{ p.entrega.recibo }}). Falta assinar e protocolar lá.</p>
+      <p class="pequeno" id="no-sig">No {{ sig_nome }} como rascunho desde {{ p.entrega.recebida_em | data }} às {{ p.entrega.recebida_em | hora }} (recibo {{ p.entrega.recibo }}). Falta assinar e protocolar lá.</p>
+      {% if mudou %}<p class="aviso atencao pequeno" id="mudou">A minuta mudou depois do envio. O rascunho no SIG é o anterior.</p>{% endif %}
       {% endif %}
+      <p class="aviso atencao pequeno" id="trechos" role="status" {% if not pendentes %}hidden{% endif %}>{{ '1 trecho entre colchetes a completar' if pendentes == 1 else pendentes ~ ' trechos entre colchetes a completar' }}</p>
       <form method="post" action="/processos/{{ p.id }}/entregar" id="form-entregar">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="btn {{ 'principal' if not em_branco and not p.entrega }} largo" type="submit">{{ 'Enviar de novo ao SIG' if p.entrega else 'Enviar ao SIG' }}</button>
+        <button class="btn {{ 'principal' if not em_branco and not pendentes and (mudou or not p.entrega) }} largo" type="submit" id="enviar-sig" {% if not em_branco and (mudou or not p.entrega) %}data-principal{% endif %}>{{ 'Trocar o rascunho no ' ~ sig_nome if p.entrega else 'Enviar ao ' ~ sig_nome }}</button>
       </form>
-      <p class="fraco pequeno">Vai como rascunho, sem assinatura. Você assina e protocola no SIG.</p>
+      <p class="fraco pequeno">{{ 'O rascunho que está lá é substituído por esta versão.' if p.entrega else 'Vai como rascunho, sem assinatura. Você assina e protocola no SIG.' }}</p>
       <details>
         <summary>Baixar ou copiar</summary>
         <div class="pilha">
@@ -184,12 +186,14 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         {% if p.situacao == 'a_fazer' %}
         <input type="hidden" name="situacao" value="concluido">
-        <button class="btn largo" type="submit">{{ 'Concluir sem enviar' if sig_direto else 'Marcar como concluído' }}</button>
+        <button class="btn largo" type="submit">{{ 'Concluir sem enviar ao SIG' if sig_direto else 'Marcar como concluído' }}</button>
         {% else %}
         <input type="hidden" name="situacao" value="a_fazer">
-        <button class="btn largo" type="submit">Devolver à fila</button>
+        <button class="btn largo" type="submit">{{ 'Tirar do SIG e voltar à mesa' if p.entrega else 'Devolver à fila' }}</button>
         {% endif %}
       </form>
+      {% if sig_direto and p.situacao == 'a_fazer' %}<p class="fraco pequeno">Use se já resolveu este processo fora daqui.</p>
+      {% elif p.entrega %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a sua fila.</p>{% endif %}
       {% if not escrevendo %}
       <details>
         <summary>{{ 'Voltar à minuta em branco' if ia else 'Refazer a minuta do zero' }}</summary>

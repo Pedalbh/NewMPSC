@@ -219,7 +219,7 @@ def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None,
 
 def buscar_fila(db: Session, usuario: Usuario, conexao: Conexao, motor: Motor, ficticio: bool) -> ResultadoImportacao:
     """Pede a fila direto ao SIG, sem arquivo, e atualiza a fila do usuário do mesmo jeito que a planilha."""
-    return _atualizar_fila(db, usuario, conexao.buscar_fila(), motor, ficticio, "sig")
+    return _atualizar_fila(db, usuario, conexao.buscar_fila(usuario.email), motor, ficticio, "sig")
 
 
 def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, ficticio: bool,
@@ -324,25 +324,40 @@ def trechos_pendentes(blocos: list[dict]) -> int:
     return sum(len(_MARCA.findall(b.get("texto") or "")) for b in blocos)
 
 
-def entregar_ao_sig(db: Session, processo: Processo, conexao: Conexao, agora: datetime) -> EntregaSig:
+def entregar_ao_sig(db: Session, processo: Processo, usuario: Usuario, conexao: Conexao, agora: datetime,
+                    ficticio: bool) -> EntregaSig:
     """Deixa a minuta no SIG como rascunho, guarda o recibo e conclui o processo na mesa. Enviar de novo troca
     o rascunho. Quem assina e protocola é o usuário, no SIG (limite 2). Levanta ValueError com a orientação."""
+    if processo.usuario_id != usuario.id:   # a rota já filtra; aqui é a segunda barreira
+        raise ValueError("processo de outro usuário")
     if escrevendo(processo):
         raise ValueError("a minuta está sendo escrita; espere terminar")
-    blocos = processo.minuta.blocos
-    texto = documento.texto_simples(blocos)
-    recibo = conexao.entregar_rascunho(processo.numero, texto)
+    # Limite 1 do projeto, como nos autos e no pedido à IA: em servidor de dados fictícios, número real não sai.
+    if ficticio and dv_ok(processo.numero):
+        raise ValueError("este servidor só aceita dados fictícios, e o número deste processo é real")
+    blocos = [dict(b) for b in processo.minuta.blocos]   # cópia: o rascunho não muda se a minuta mudar depois
+    recibo = conexao.entregar_rascunho(usuario.email, processo.numero, documento.texto_simples(blocos))
     if processo.entrega:
         db.delete(processo.entrega)
         db.flush()
     processo.entrega = EntregaSig(usuario_id=processo.usuario_id, recibo=recibo[:40], tipo=processo.minuta.tipo,
-                                  texto=texto, pendentes=trechos_pendentes(blocos), recebida_em=agora)
-    definir_situacao(db, processo, "concluido", agora)
+                                  blocos=blocos, pendentes=trechos_pendentes(blocos), recebida_em=agora)
+    try:
+        definir_situacao(db, processo, "concluido", agora)
+    except IntegrityError:   # o mesmo processo enviado duas vezes ao mesmo tempo (duas abas, clique duplo)
+        db.rollback()
+        raise ValueError("este processo já estava sendo enviado; confira em Concluídos") from None
     return processo.entrega
 
 
+def mudou_depois_do_envio(processo: Processo) -> bool:
+    """A minuta da mesa já não é a que está no SIG como rascunho."""
+    return bool(processo.entrega and processo.minuta and processo.minuta.blocos != processo.entrega.blocos)
+
+
 def entregas_do_usuario(db: Session, usuario: Usuario) -> list[EntregaSig]:
-    return list(db.scalars(select(EntregaSig).where(EntregaSig.usuario_id == usuario.id)
+    return list(db.scalars(select(EntregaSig).join(Processo)
+                           .where(EntregaSig.usuario_id == usuario.id, Processo.usuario_id == usuario.id)
                            .order_by(EntregaSig.recebida_em.desc(), EntregaSig.id.desc())))
 
 

@@ -129,6 +129,10 @@ def criar_motor(nome: str, modelo: str = "") -> Motor:
     raise RuntimeError(f"motor desconhecido: {nome} (disponíveis: demo, claude)")
 
 
+class SigIndisponivel(Exception):
+    """O SIG não respondeu à busca ou à entrega. A tela orienta a tentar de novo ou usar a planilha."""
+
+
 class Conexao(Protocol):
     """A porta do SIG. `busca_direta` diz se a fila chega e a minuta volta sem arquivo no meio."""
     nome: str
@@ -138,12 +142,16 @@ class Conexao(Protocol):
     def ler_fila(self, dados: bytes, nome_arquivo: str | None) -> dict:
         """A fila a partir da planilha exportada, no contrato sig-tabela (`linhas` e `conferir`)."""
 
-    def buscar_fila(self) -> dict:
-        """A fila pedida direto ao SIG, no mesmo contrato. Só com `busca_direta`."""
+    def buscar_fila(self, quem: str) -> dict:
+        """A fila de `quem` (a pessoa que está usando) pedida direto ao SIG, no mesmo contrato. Só com
+        `busca_direta`. Levanta `SigIndisponivel`."""
 
-    def entregar_rascunho(self, numero: str, texto: str) -> str:
-        """Deixa a minuta no SIG como rascunho, sem assinatura, e devolve o recibo. Só com `busca_direta`.
-        Assinar e protocolar continuam sendo do usuário, no SIG."""
+    def entregar_rascunho(self, quem: str, numero: str, texto: str) -> str:
+        """Deixa a minuta no SIG como rascunho de `quem`, sem assinatura, e devolve o recibo. Só com
+        `busca_direta`. Assinar e protocolar continuam sendo do usuário, no SIG. Levanta `SigIndisponivel`.
+
+        `quem` existe para a integração oficial agir com a identidade da própria pessoa, e não com uma conta de
+        serviço que enxergue várias promotorias: a fila é a dela e o rascunho fica em nome dela."""
 
 
 class ConexaoPlanilha:
@@ -157,10 +165,10 @@ class ConexaoPlanilha:
     def ler_fila(self, dados: bytes, nome_arquivo: str | None) -> dict:
         return tabela.ler(dados, nome=nome_arquivo)
 
-    def buscar_fila(self) -> dict:
+    def buscar_fila(self, quem: str) -> dict:
         raise NotImplementedError("a planilha não busca a fila sozinha")
 
-    def entregar_rascunho(self, numero: str, texto: str) -> str:
+    def entregar_rascunho(self, quem: str, numero: str, texto: str) -> str:
         raise NotImplementedError("a planilha não recebe minuta")
 
 
@@ -172,7 +180,7 @@ class ConexaoSigSimulado(ConexaoPlanilha):
     Não fala com o SIG de verdade nem com o eproc, e a aplicação só parte com ele em ambiente de dados
     fictícios. A fila é sempre a do arquivo fictício; o rascunho entregue fica guardado na própria aplicação
     (`entregas_sig`), que o mostra na tela "SIG simulado". A integração oficial, se o MPSC abrir, é outra classe
-    com estes mesmos três métodos."""
+    com estes mesmos três métodos, agindo com a identidade de `quem` pede."""
 
     nome = "SIG simulado"
     busca_direta = True
@@ -180,10 +188,13 @@ class ConexaoSigSimulado(ConexaoPlanilha):
     def __init__(self, fila: Path = FILA_DO_SIG_SIMULADO):
         self._fila = fila
 
-    def buscar_fila(self) -> dict:
-        return tabela.ler(self._fila.read_bytes(), nome=self._fila.name)
+    def buscar_fila(self, quem: str) -> dict:
+        try:   # a mesma fila fictícia para todos: o simulado não tem promotorias
+            return tabela.ler(self._fila.read_bytes(), nome=self._fila.name)
+        except OSError:
+            raise SigIndisponivel from None
 
-    def entregar_rascunho(self, numero: str, texto: str) -> str:
+    def entregar_rascunho(self, quem: str, numero: str, texto: str) -> str:
         return f"SIM-{secrets.token_hex(4).upper()}"   # o recibo que um SIG devolveria; nada sai da aplicação
 
 

@@ -18,7 +18,7 @@ from . import VERSAO, autos, servicos
 from .config import Config, carregar
 from .modelos import Usuario, criar_banco
 from .nucleo import documento
-from .portas import MotorIndisponivel, criar_conexao, criar_motor
+from .portas import MotorIndisponivel, SigIndisponivel, criar_conexao, criar_motor
 from .seguranca import LimiteTentativas, conferir_senha, csrf_confere, token_csrf
 
 AQUI = Path(__file__).parent
@@ -42,8 +42,10 @@ def _dia_extenso(d: datetime) -> str:
     return f"{DIAS[d.weekday()]}, {d.day} de {MESES[d.month - 1]}"
 
 
-def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_segundo_plano=None) -> FastAPI:
-    """`motor` e `em_segundo_plano` existem para os testes: um motor de mentira e a escrita feita na hora."""
+def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_segundo_plano=None,
+              conexao=None) -> FastAPI:
+    """`motor`, `em_segundo_plano` e `conexao` existem para os testes: um motor de mentira, a escrita feita na hora
+    e um SIG de mentira que falha."""
     config = config or carregar()
     motor_banco, Sessao = criar_banco(config.banco_url, config.chave_impressao)
     motor = motor or criar_motor(config.motor, config.modelo)
@@ -53,7 +55,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     if config.sig == "simulado" and not config.dados_ficticios:
         # Limites 1 e 2. Como a do motor, a trava vale aqui também, para quem monta a aplicação sem ler o ambiente.
         raise RuntimeError("SIG simulado só com dados fictícios: com dado real, a planilha ou a integração oficial")
-    conexao = criar_conexao(config.sig)
+    conexao = conexao or criar_conexao(config.sig)
     limite = LimiteTentativas()
     em_segundo_plano = em_segundo_plano or ThreadPoolExecutor(
         max_workers=servicos.ESCRITAS_AO_MESMO_TEMPO, thread_name_prefix="minuta").submit
@@ -143,9 +145,11 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         ctx.update(csrf=token_csrf(request.session), aviso=request.session.pop("aviso", None))
         return telas.TemplateResponse(request, nome, ctx, status_code=status)
 
-    def avisar(request: Request, tipo: str, textos: str | list[str], local: str = "") -> None:
-        """`local` põe o aviso dentro de um cartão da tela, em vez do topo."""
-        request.session["aviso"] = {"tipo": tipo, "local": local,
+    def avisar(request: Request, tipo: str, textos: str | list[str], local: str = "",
+               elo: tuple[str, str] | None = None) -> None:
+        """`local` põe o aviso dentro de um cartão da tela, em vez do topo. `elo` (texto, caminho) acrescenta um
+        atalho ao fim do aviso."""
+        request.session["aviso"] = {"tipo": tipo, "local": local, "elo": elo,
                                     "textos": [textos] if isinstance(textos, str) else textos[:8]}
 
     def voltar(caminho: str) -> RedirectResponse:
@@ -268,7 +272,13 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     @app.post("/processos/buscar", dependencies=[Depends(exigir_busca_direta), Depends(exigir_csrf)])
     def buscar(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
         """A fila pedida direto ao SIG, sem arquivo. Hoje só o SIG simulado atende."""
-        _resumo(request, servicos.buscar_fila(db, usuario, conexao, motor, config.dados_ficticios))
+        try:
+            _resumo(request, servicos.buscar_fila(db, usuario, conexao, motor, config.dados_ficticios))
+        except conexao.Recusada as e:
+            avisar(request, "erro", f"A fila do {conexao.nome} não foi lida: {e}.")
+        except SigIndisponivel:
+            avisar(request, "erro", [f"O {conexao.nome} não respondeu. Nada mudou na sua mesa.",
+                                     "Tente de novo em instantes. Se continuar, use a planilha exportada."])
         return voltar("/")
 
     @app.post("/processos/colar", dependencies=[Depends(exigir_csrf)])
@@ -282,11 +292,14 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             avisar(request, "erro", res.conferir or ["Nenhum processo encontrado."])
             return
         partes = []
-        if res.novos:
-            partes.append(f"{res.novos} processo(s) novo(s), " + ("prontos para receber os autos" if motor.usa_autos
-                                                                   else "com a primeira minuta pronta"))
+        if res.novos == 1:
+            partes.append("1 processo novo, " + ("pronto para receber os autos" if motor.usa_autos
+                                                 else "com a primeira minuta pronta"))
+        elif res.novos:
+            partes.append(f"{res.novos} processos novos, " + ("prontos para receber os autos" if motor.usa_autos
+                                                              else "com a primeira minuta pronta"))
         if res.atualizados:
-            partes.append(f"{res.atualizados} já estava(m) na fila")
+            partes.append("1 já estava na fila" if res.atualizados == 1 else f"{res.atualizados} já estavam na fila")
         avisar(request, "atencao" if res.conferir else "ok", ["; ".join(partes) + "."] + res.conferir)
 
     @app.get("/processos/{processo_id}", response_class=HTMLResponse)
@@ -298,6 +311,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         # há quanto tempo escreve, contado no servidor: a tela não depende do fuso do navegador
         decorrido = int((datetime.now() - p.tarefa.iniciada_em).total_seconds()) if esperando else 0
         return tela(request, "processo.html", usuario=usuario, pagina="processos", p=p, minuta=p.minuta,
+                    pendentes=servicos.trechos_pendentes(p.minuta.blocos),
+                    mudou=servicos.mudou_depois_do_envio(p),
                     apagar_em=servicos.autos_apagados_em(p) if p.autos else None,
                     escrevendo=esperando, resultado_novo=resultado_novo, decorrido=max(decorrido, 0))
 
@@ -389,28 +404,43 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         return voltar("/" if nova == "concluido" else f"/processos/{p.id}")
 
     @app.post("/processos/{processo_id}/entregar", dependencies=[Depends(exigir_busca_direta), Depends(exigir_csrf)])
-    def entregar(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+    def entregar(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
         """Deixa a minuta no SIG como rascunho e tira o processo da mesa. Assinar e protocolar ficam com a pessoa."""
+        estava_na_mesa = p.situacao == "a_fazer"
         try:
-            entrega = servicos.entregar_ao_sig(db, db.merge(p), conexao, agora())
+            entrega = servicos.entregar_ao_sig(db, db.merge(p), usuario, conexao, agora(), config.dados_ficticios)
         except ValueError as e:
             raise HTTPException(409, str(e).capitalize() + ".") from None
+        except SigIndisponivel:
+            avisar(request, "erro", [f"O {conexao.nome} não respondeu. A minuta não foi enviada e continua aqui.",
+                                     "Tente de novo em instantes. Se continuar, use Baixar ou copiar."])
+            return voltar(f"/processos/{p.id}")
         falta = "" if not entrega.pendentes else (
             " Foi com 1 trecho entre colchetes a completar." if entrega.pendentes == 1
             else f" Foi com {entrega.pendentes} trechos entre colchetes a completar.")
         avisar(request, "atencao" if entrega.pendentes else "ok", [
             f"A minuta de {p.numero} foi para o {conexao.nome} como rascunho (recibo {entrega.recibo}).{falta}",
-            "Falta você assinar e protocolar no SIG. O processo saiu da sua mesa e está em Concluídos."])
+            "Falta você assinar e protocolar no SIG." + (
+                " O processo saiu da sua mesa e está em Concluídos." if estava_na_mesa
+                else " O rascunho anterior foi substituído.")],
+            elo=("Abrir o processo enviado", f"/processos/{p.id}"))
         return voltar("/")
 
     @app.get("/sig-simulado", response_class=HTMLResponse, dependencies=[Depends(exigir_busca_direta)])
     def sig_simulado(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
         """O outro lado do envelope: o que o SIG tem para este usuário e o que recebeu dele."""
-        linhas = conexao.buscar_fila()["linhas"]
-        na_mesa = servicos.numeros_do_usuario(db, usuario)
-        return tela(request, "sig_simulado.html", usuario=usuario, pagina="sig", linhas=linhas, na_mesa=na_mesa,
-                    buscados=sum(1 for linha in linhas if linha["judiciario"] in na_mesa),
-                    entregas=servicos.entregas_do_usuario(db, usuario))
+        try:
+            linhas = conexao.buscar_fila(usuario.email)["linhas"]
+        except SigIndisponivel:
+            raise HTTPException(503, f"O {conexao.nome} não respondeu. Tente de novo em instantes.") from None
+        entregas = servicos.entregas_do_usuario(db, usuario)
+        recibos = {e.processo.numero: e.recibo for e in entregas}
+        buscados = servicos.numeros_do_usuario(db, usuario)
+        estados = [(linha, "rascunho" if linha["judiciario"] in recibos else
+                    "mesa" if linha["judiciario"] in buscados else "sig") for linha in linhas]
+        return tela(request, "sig_simulado.html", usuario=usuario, pagina="sig", estados=estados, recibos=recibos,
+                    conta={e: sum(1 for _, x in estados if x == e) for e in ("sig", "mesa", "rascunho")},
+                    entregas=entregas)
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])
     def refazer(request: Request, p=Depends(meu_processo), db=Depends(banco)):

@@ -134,7 +134,7 @@ class PaginaAutos(Base):
 
 
 class EntregaSig(Base):
-    """Minuta deixada no SIG como rascunho, sem assinatura: o recibo e o texto como foi. Uma por processo.
+    """Minuta deixada no SIG como rascunho, sem assinatura: o recibo e a folha como foi. Uma por processo.
     Hoje só o SIG simulado cria (protótipo, dados fictícios); é o que a tela "SIG simulado" mostra."""
     __tablename__ = "entregas_sig"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -142,10 +142,14 @@ class EntregaSig(Base):
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), unique=True)
     recibo: Mapped[str] = mapped_column(String(40))
     tipo: Mapped[str] = mapped_column(String(120), default="")
-    texto: Mapped[str] = mapped_column(Text)
+    blocos: Mapped[list] = mapped_column(JSON)   # a folha como foi, com os estilos do Manual
     pendentes: Mapped[int] = mapped_column(Integer, default=0)   # trechos entre colchetes que foram junto
     recebida_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     processo: Mapped[Processo] = relationship(back_populates="entrega")
+
+    @property
+    def texto(self) -> str:
+        return "\n\n".join(b["texto"] for b in self.blocos)
 
 
 class Audiencia(Base):

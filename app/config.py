@@ -42,7 +42,11 @@ def carregar(env=None) -> Config:
     if ambiente == "producao" and env.get("ANTHROPIC_LOG"):
         raise RuntimeError("ANTHROPIC_LOG não pode estar ligado em produção: o registro traria o texto dos autos")
     motor = env.get("NEWMPSC_MOTOR", "demo")
-    ficticios = env.get("NEWMPSC_DADOS_FICTICIOS", "1") != "0"
+    declarado = env.get("NEWMPSC_DADOS_FICTICIOS", "1")
+    if declarado not in ("0", "1"):
+        # "false", "nao" ou vazio não podem passar por "fictício": as travas do motor e do SIG dependem deste valor
+        raise RuntimeError("NEWMPSC_DADOS_FICTICIOS inválido: use 1 (só dados fictícios) ou 0 (dado real)")
+    ficticios = declarado == "1"
     if motor != "demo" and not ficticios:
         # Cartão C4: texto de processo real só vai para um serviço de IA depois de contrato institucional.
         raise RuntimeError("motor de IA só com dados fictícios: dado real depende de contrato institucional")

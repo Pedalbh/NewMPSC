@@ -39,6 +39,7 @@
 {% if aviso and not aviso.local %}
 <div class="aviso {{ aviso.tipo }}" role="status">
   {% for t in aviso.textos %}<p>{{ t }}</p>{% endfor %}
+  {% if aviso.elo %}<p><a class="elo-aviso" href="{{ aviso.elo[1] }}">{{ aviso.elo[0] }}</a></p>{% endif %}
 </div>
 {% endif %}
 {% block conteudo %}{% endblock %}
