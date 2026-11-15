@@ -18,7 +18,7 @@ from . import VERSAO, autos, servicos
 from .config import Config, carregar
 from .modelos import Usuario, criar_banco
 from .nucleo import documento
-from .portas import ConexaoPlanilha, MotorIndisponivel, criar_motor
+from .portas import MotorIndisponivel, criar_conexao, criar_motor
 from .seguranca import LimiteTentativas, conferir_senha, csrf_confere, token_csrf
 
 AQUI = Path(__file__).parent
@@ -50,7 +50,10 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     if motor.usa_autos and not config.dados_ficticios:
         # Cartão C4. A trava vale aqui, onde o motor já está decidido, e não só na leitura do ambiente.
         raise RuntimeError("motor de IA só com dados fictícios: dado real depende de contrato institucional")
-    conexao = ConexaoPlanilha()
+    if config.sig == "simulado" and not config.dados_ficticios:
+        # Limites 1 e 2. Como a do motor, a trava vale aqui também, para quem monta a aplicação sem ler o ambiente.
+        raise RuntimeError("SIG simulado só com dados fictícios: com dado real, a planilha ou a integração oficial")
+    conexao = criar_conexao(config.sig)
     limite = LimiteTentativas()
     em_segundo_plano = em_segundo_plano or ThreadPoolExecutor(
         max_workers=servicos.ESCRITAS_AO_MESMO_TEMPO, thread_name_prefix="minuta").submit
@@ -76,7 +79,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     telas.env.filters["dia_extenso"] = _dia_extenso
     # só o que as telas precisam saber do motor; o objeto (com o cliente e a chave) não vai para os modelos de tela
     telas.env.globals.update(versao=VERSAO, grupos=servicos.GRUPOS, config=config, ia=motor.usa_autos,
-                             origem_ia=servicos.ORIGEM_IA, origem_em_branco=servicos.ORIGEM_EM_BRANCO)
+                             origem_ia=servicos.ORIGEM_IA, origem_em_branco=servicos.ORIGEM_EM_BRANCO,
+                             sig_direto=conexao.busca_direta, sig_nome=conexao.nome)
 
     @app.middleware("http")
     async def cabecalhos(request: Request, call_next):
@@ -257,6 +261,16 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         _resumo(request, res)
         return voltar("/")
 
+    def exigir_busca_direta() -> None:
+        if not conexao.busca_direta:   # com a planilha, estas rotas não existem
+            raise HTTPException(404, "Página não encontrada.")
+
+    @app.post("/processos/buscar", dependencies=[Depends(exigir_busca_direta), Depends(exigir_csrf)])
+    def buscar(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
+        """A fila pedida direto ao SIG, sem arquivo. Hoje só o SIG simulado atende."""
+        _resumo(request, servicos.buscar_fila(db, usuario, conexao, motor, config.dados_ficticios))
+        return voltar("/")
+
     @app.post("/processos/colar", dependencies=[Depends(exigir_csrf)])
     async def colar(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
         texto = str((await request.form()).get("numeros") or "")[:20000]
@@ -361,6 +375,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         nova = str((await request.form()).get("situacao") or "")
         try:
             p = db.merge(p)
+            no_sig = p.entrega is not None
             servicos.definir_situacao(db, p, nova, agora())
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
@@ -369,8 +384,33 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             avisar(request, "ok", "Processo concluído." + (
                 f" A minuta fica; o texto dos autos será apagado em {fim:%d/%m/%Y}." if fim else ""))
         else:
-            avisar(request, "ok", "Processo devolvido à fila.")
+            avisar(request, "ok", "Processo devolvido à fila." + (
+                f" O rascunho saiu do {conexao.nome}." if no_sig else ""))
         return voltar("/" if nova == "concluido" else f"/processos/{p.id}")
+
+    @app.post("/processos/{processo_id}/entregar", dependencies=[Depends(exigir_busca_direta), Depends(exigir_csrf)])
+    def entregar(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+        """Deixa a minuta no SIG como rascunho e tira o processo da mesa. Assinar e protocolar ficam com a pessoa."""
+        try:
+            entrega = servicos.entregar_ao_sig(db, db.merge(p), conexao, agora())
+        except ValueError as e:
+            raise HTTPException(409, str(e).capitalize() + ".") from None
+        falta = "" if not entrega.pendentes else (
+            " Foi com 1 trecho entre colchetes a completar." if entrega.pendentes == 1
+            else f" Foi com {entrega.pendentes} trechos entre colchetes a completar.")
+        avisar(request, "atencao" if entrega.pendentes else "ok", [
+            f"A minuta de {p.numero} foi para o {conexao.nome} como rascunho (recibo {entrega.recibo}).{falta}",
+            "Falta você assinar e protocolar no SIG. O processo saiu da sua mesa e está em Concluídos."])
+        return voltar("/")
+
+    @app.get("/sig-simulado", response_class=HTMLResponse, dependencies=[Depends(exigir_busca_direta)])
+    def sig_simulado(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
+        """O outro lado do envelope: o que o SIG tem para este usuário e o que recebeu dele."""
+        linhas = conexao.buscar_fila()["linhas"]
+        na_mesa = servicos.numeros_do_usuario(db, usuario)
+        return tela(request, "sig_simulado.html", usuario=usuario, pagina="sig", linhas=linhas, na_mesa=na_mesa,
+                    buscados=sum(1 for linha in linhas if linha["judiciario"] in na_mesa),
+                    entregas=servicos.entregas_do_usuario(db, usuario))
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])
     def refazer(request: Request, p=Depends(meu_processo), db=Depends(banco)):

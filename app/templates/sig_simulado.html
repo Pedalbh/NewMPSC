@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block titulo %}SIG simulado · NewMPSC{% endblock %}
+{% block conteudo %}
+<section class="saudacao">
+  <h1>SIG simulado</h1>
+  <p class="fraco">O outro lado: o que o SIG tem para você e o que recebeu de você. É uma simulação com dados fictícios; nada aqui chega ao SIG de verdade.</p>
+</section>
+<div class="grade">
+  <section class="cartao principal" aria-labelledby="t-recebidas">
+    <div class="linha">
+      <h2 id="t-recebidas">Rascunhos recebidos</h2>
+      <span class="selo empurra">{{ entregas | length }}</span>
+    </div>
+    {% if entregas %}
+    <ul class="recebidas">
+      {% for e in entregas %}
+      <li>
+        <details>
+          <summary>
+            <span class="proc-texto">
+              <span class="num">{{ e.processo.numero }}</span>
+              <span class="fraco">{{ e.tipo }} · recibo {{ e.recibo }} · {{ e.recebida_em | data }} às {{ e.recebida_em | hora }}</span>
+            </span>
+            <span class="proc-selos">
+              {% if e.pendentes %}<span class="selo atencao">{{ e.pendentes }} a completar</span>{% endif %}
+              <span class="selo">Sem assinatura</span>
+            </span>
+          </summary>
+          <pre class="rascunho">{{ e.texto }}</pre>
+          <p class="fraco pequeno">No SIG de verdade, é aqui que você confere, assina e protocola. <a class="elo" href="/processos/{{ e.processo_id }}">Abrir na mesa</a></p>
+        </details>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="vazio">
+      <p class="vazio-titulo">Nenhum rascunho recebido</p>
+      <p class="fraco">Abra um processo na mesa e use Enviar ao SIG. A minuta aparece aqui, sem assinatura.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <div class="lateral pilha-cartoes">
+    <section class="cartao" aria-labelledby="t-fila-sig">
+      <div class="linha">
+        <h2 id="t-fila-sig">Fila no SIG</h2>
+        <span class="selo empurra {{ 'ok' if buscados == linhas | length }}">{{ buscados }} de {{ linhas | length }} na mesa</span>
+      </div>
+      <ul class="arquivos">
+        {% for l in linhas %}
+        <li>
+          <div class="arquivo-texto">
+            <span class="num">{{ l.judiciario }}</span>
+            <span class="fraco pequeno">{{ l.classe }}{% if l.assunto %} · {{ l.assunto }}{% endif %}</span>
+            <span class="arquivo-selos"><span class="selo {{ 'ok' if l.judiciario in na_mesa }}">{{ 'Na mesa' if l.judiciario in na_mesa else 'Só no SIG' }}</span></span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if buscados < linhas | length %}
+      <form method="post" action="/processos/buscar">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn principal largo" type="submit">Buscar no SIG</button>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

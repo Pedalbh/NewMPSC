@@ -12,10 +12,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .autos import Leitura, impressao, limpar
-from .modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, PedidoIA, Processo, TarefaMinuta, Usuario
+from .modelos import ArquivoAutos, Audiencia, EntregaSig, Minuta, PaginaAutos, PedidoIA, Processo, TarefaMinuta, Usuario
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
-from .portas import ConexaoPlanilha, DadosProcesso, Motor, MotorIndisponivel, PaginaDosAutos, esqueleto
+from .portas import Conexao, DadosProcesso, Motor, MotorIndisponivel, PaginaDosAutos, esqueleto
 
 CNJ = re.compile(r"(?<!\d)\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}(?!\d)")
 GRUPOS = ("Réu preso", "Vista urgente", "Intimação", "Outros")
@@ -210,11 +210,20 @@ def encerrar_escritas_interrompidas(db: Session) -> None:
     db.commit()
 
 
-def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None, conexao: ConexaoPlanilha,
+def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None, conexao: Conexao,
                   motor: Motor, ficticio: bool) -> ResultadoImportacao:
     """Lê a tabela do SIG e atualiza a fila do usuário. Processo novo já ganha a primeira minuta.
     Levanta `conexao.Recusada` com a orientação para o usuário."""
-    fila = conexao.ler_fila(dados, nome)
+    return _atualizar_fila(db, usuario, conexao.ler_fila(dados, nome), motor, ficticio, "planilha")
+
+
+def buscar_fila(db: Session, usuario: Usuario, conexao: Conexao, motor: Motor, ficticio: bool) -> ResultadoImportacao:
+    """Pede a fila direto ao SIG, sem arquivo, e atualiza a fila do usuário do mesmo jeito que a planilha."""
+    return _atualizar_fila(db, usuario, conexao.buscar_fila(), motor, ficticio, "sig")
+
+
+def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, ficticio: bool,
+                    origem: str) -> ResultadoImportacao:
     res = ResultadoImportacao()
     existentes = {p.numero: p for p in db.scalars(select(Processo).where(Processo.usuario_id == usuario.id))}
     for linha in fila["linhas"]:
@@ -224,7 +233,7 @@ def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None,
                       grupo=grupo_de(linha["reu_preso"], linha["vista"]))
         p = existentes.get(linha["judiciario"])
         if p is None:
-            p = Processo(usuario_id=usuario.id, numero=linha["judiciario"][:25], origem="planilha", **campos)
+            p = Processo(usuario_id=usuario.id, numero=linha["judiciario"][:25], origem=origem, **campos)
             _criar_minuta(p, motor)
             db.add(p)
             res.novos += 1
@@ -302,8 +311,43 @@ def definir_situacao(db: Session, processo: Processo, situacao: str, agora: date
         processo.concluido_em = agora or datetime.now()
     elif situacao == "a_fazer":
         processo.concluido_em = None   # voltou à fila: o prazo de guarda zera
+        processo.entrega = None        # e o rascunho que estava no SIG sai de lá: a minuta voltou a ser trabalho
     processo.situacao = situacao
     db.commit()
+
+
+# os mesmos trechos que a folha destaca (app.js): o que a pessoa ainda precisa completar, conferir ou definir
+_MARCA = re.compile(r"\[(?:(?:CONFERIR|ESCREVER|DEFINIR)[^\]]*|COMARCA|DEMONSTRAÇÃO)\]")
+
+
+def trechos_pendentes(blocos: list[dict]) -> int:
+    return sum(len(_MARCA.findall(b.get("texto") or "")) for b in blocos)
+
+
+def entregar_ao_sig(db: Session, processo: Processo, conexao: Conexao, agora: datetime) -> EntregaSig:
+    """Deixa a minuta no SIG como rascunho, guarda o recibo e conclui o processo na mesa. Enviar de novo troca
+    o rascunho. Quem assina e protocola é o usuário, no SIG (limite 2). Levanta ValueError com a orientação."""
+    if escrevendo(processo):
+        raise ValueError("a minuta está sendo escrita; espere terminar")
+    blocos = processo.minuta.blocos
+    texto = documento.texto_simples(blocos)
+    recibo = conexao.entregar_rascunho(processo.numero, texto)
+    if processo.entrega:
+        db.delete(processo.entrega)
+        db.flush()
+    processo.entrega = EntregaSig(usuario_id=processo.usuario_id, recibo=recibo[:40], tipo=processo.minuta.tipo,
+                                  texto=texto, pendentes=trechos_pendentes(blocos), recebida_em=agora)
+    definir_situacao(db, processo, "concluido", agora)
+    return processo.entrega
+
+
+def entregas_do_usuario(db: Session, usuario: Usuario) -> list[EntregaSig]:
+    return list(db.scalars(select(EntregaSig).where(EntregaSig.usuario_id == usuario.id)
+                           .order_by(EntregaSig.recebida_em.desc(), EntregaSig.id.desc())))
+
+
+def numeros_do_usuario(db: Session, usuario: Usuario) -> set[str]:
+    return set(db.scalars(select(Processo.numero).where(Processo.usuario_id == usuario.id)))
 
 
 def autos_apagados_em(processo: Processo) -> datetime | None:

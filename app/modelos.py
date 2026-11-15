@@ -51,7 +51,7 @@ class Processo(Base):
     grupo: Mapped[int] = mapped_column(Integer, default=3)
     situacao: Mapped[str] = mapped_column(String(20), default="a_fazer")  # a_fazer | concluido
     concluido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)  # conta o prazo de guarda (C1)
-    origem: Mapped[str] = mapped_column(String(20), default="planilha")  # planilha | colagem
+    origem: Mapped[str] = mapped_column(String(20), default="planilha")  # planilha | colagem | sig
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
     minuta: Mapped["Minuta | None"] = relationship(back_populates="processo", cascade="all, delete-orphan",
                                                     uselist=False)
@@ -59,6 +59,8 @@ class Processo(Base):
                                                          uselist=False)
     autos: Mapped[list["ArquivoAutos"]] = relationship(back_populates="processo", cascade="all, delete-orphan",
                                                        order_by="ArquivoAutos.id")
+    entrega: Mapped["EntregaSig | None"] = relationship(back_populates="processo", cascade="all, delete-orphan",
+                                                        uselist=False)
 
 
 class Minuta(Base):
@@ -129,6 +131,21 @@ class PaginaAutos(Base):
     numero: Mapped[int] = mapped_column(Integer)
     texto: Mapped[str] = mapped_column(Text)
     arquivo: Mapped[ArquivoAutos] = relationship(back_populates="paginas")
+
+
+class EntregaSig(Base):
+    """Minuta deixada no SIG como rascunho, sem assinatura: o recibo e o texto como foi. Uma por processo.
+    Hoje só o SIG simulado cria (protótipo, dados fictícios); é o que a tela "SIG simulado" mostra."""
+    __tablename__ = "entregas_sig"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), unique=True)
+    recibo: Mapped[str] = mapped_column(String(40))
+    tipo: Mapped[str] = mapped_column(String(120), default="")
+    texto: Mapped[str] = mapped_column(Text)
+    pendentes: Mapped[int] = mapped_column(Integer, default=0)   # trechos entre colchetes que foram junto
+    recebida_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    processo: Mapped[Processo] = relationship(back_populates="entrega")
 
 
 class Audiencia(Base):

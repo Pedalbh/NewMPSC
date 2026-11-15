@@ -23,8 +23,9 @@ CHROME = os.environ.get("NEWMPSC_CHROME", "")
 PRINTS = os.environ.get("NEWMPSC_PRINTS")
 
 
-def _servir(pasta, motor_nome="demo", **opcoes):
-    app = criar_app(Config("teste", "s" * 40, f"sqlite:///{pasta / 'newmpsc.db'}", motor_nome, True), **opcoes)
+def _servir(pasta, motor_nome="demo", sig="planilha", **opcoes):
+    app = criar_app(Config("teste", "s" * 40, f"sqlite:///{pasta / 'newmpsc.db'}", motor_nome, True, sig=sig),
+                    **opcoes)
     with app.state.Sessao() as db:
         criar_usuario(db, "ana@exemplo.invalid", "Ana Exemplo", SENHA, "Promotora de Justiça")
     with socket.socket() as s:
@@ -63,6 +64,14 @@ def endereco_ia(tmp_path_factory):
                 "pontos_a_enfrentar": ["Há prova da autoria?"]}
     servidor, url = _servir(tmp_path_factory.mktemp("banco-ia"), "claude",
                             motor=MotorClaude(ClienteLento(resposta=resposta)))
+    yield url
+    servidor.should_exit = True
+
+
+@pytest.fixture(scope="module")
+def endereco_sig(tmp_path_factory):
+    """Servidor com o SIG simulado: a fila chega e a minuta volta sem arquivo."""
+    servidor, url = _servir(tmp_path_factory.mktemp("banco-sig"), sig="simulado")
     yield url
     servidor.should_exit = True
 
@@ -292,4 +301,77 @@ def test_relatorio_escrito_pelo_motor_de_ia(endereco_ia, pagina):
     assert pg.evaluate("document.querySelector('#resultado-escrita').getBoundingClientRect().top < "
                        "document.querySelector('#folha').getBoundingClientRect().top")
     foto(pg, "15-relatorio-celular")
+    assert pg.erros == [], pg.erros
+
+
+def test_envelope_do_sig_simulado(endereco_sig, pagina):
+    """O fluxo sem arquivo: buscar a fila no SIG, corrigir a minuta, enviar como rascunho e ver o outro lado."""
+    pg = pagina
+    pg.set_viewport_size({"width": 1360, "height": 900})
+    pg.context.clear_cookies()
+    pg.goto(endereco_sig)
+    pg.get_by_label("E-mail").fill("ana@exemplo.invalid")
+    pg.get_by_label("Senha").fill(SENHA)
+    pg.get_by_role("button", name="Entrar").click()
+    pg.get_by_text("Busque a sua fila no SIG").wait_for()
+    sync_api.expect(pg.locator(".faixa")).to_contain_text("SIG simulado")
+    foto(pg, "16-sig-mesa-vazia")
+
+    # um clique traz a fila, sem exportar nem escolher arquivo
+    pg.get_by_role("button", name="Buscar no SIG").click()
+    pg.get_by_text("9 processo(s) novo(s)").wait_for()
+    assert pg.locator(".fila .proc").count() == 9
+    foto(pg, "17-sig-fila")
+
+    # abrir, corrigir e enviar: o rascunho leva a última versão digitada, sem esperar o salvamento automático
+    pg.locator(".fila .proc").first.click()
+    pg.locator("#folha").wait_for()
+    enviar = pg.get_by_role("button", name="Enviar ao SIG")
+    sync_api.expect(enviar).to_be_in_viewport()
+    assert pg.get_by_role("link", name="Baixar em Word").is_hidden()   # a saída por arquivo fica recolhida
+    foto(pg, "18-sig-minuta")
+    pg.locator("#folha .b-corpo").first.click()
+    pg.keyboard.press("End")
+    pg.keyboard.type(" Frase do envelope.")
+    perguntas = []
+    pg.once("dialog", lambda d: (perguntas.append(d.message), d.dismiss()))
+    enviar.click()
+    assert "entre colchetes a completar. Enviar ao SIG assim mesmo?" in perguntas[0]
+    assert "/processos/" in pg.url   # recusou: continua no processo
+    pg.once("dialog", lambda d: d.accept())
+    enviar.click()
+    pg.get_by_text("como rascunho (recibo SIM-").wait_for()
+    sync_api.expect(pg.get_by_text("Falta você assinar e protocolar no SIG.")).to_be_visible()
+    assert pg.locator(".fila .proc").count() == 8
+    foto(pg, "19-sig-enviada")
+
+    # o outro lado: o SIG simulado mostra o rascunho, sem assinatura, com o texto digitado
+    pg.get_by_role("link", name="SIG simulado").click()
+    pg.get_by_role("heading", name="Rascunhos recebidos").wait_for()
+    assert pg.locator(".recebidas li").count() == 1
+    sync_api.expect(pg.locator(".recebidas .selo", has_text="Sem assinatura")).to_be_visible()
+    sync_api.expect(pg.get_by_text("9 de 9 na mesa")).to_be_visible()
+    pg.locator(".recebidas summary").click()
+    sync_api.expect(pg.locator(".rascunho")).to_contain_text("Frase do envelope.")
+    foto(pg, "20-sig-outro-lado")
+
+    # na mesa, o processo concluído diz onde está; devolver à fila retira o rascunho
+    pg.get_by_role("link", name="Abrir na mesa").click()
+    sync_api.expect(pg.locator("#no-sig")).to_contain_text("Falta assinar e protocolar lá.")
+    sync_api.expect(pg.get_by_role("button", name="Enviar de novo ao SIG")).to_be_visible()
+    foto(pg, "21-sig-processo-enviado")
+    pg.get_by_role("button", name="Devolver à fila").click()
+    pg.get_by_text("O rascunho saiu do SIG simulado.").wait_for()
+    pg.get_by_role("link", name="SIG simulado").click()
+    pg.get_by_text("Nenhum rascunho recebido").wait_for()
+
+    # celular: sem rolagem lateral nas duas telas novas
+    pg.set_viewport_size({"width": 390, "height": 800})
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    foto(pg, "22-sig-celular-outro-lado")
+    pg.goto(endereco_sig)
+    pg.locator(".fila .proc").first.wait_for()
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    foto(pg, "23-sig-celular-mesa")
+    pg.set_viewport_size({"width": 1360, "height": 900})
     assert pg.erros == [], pg.erros

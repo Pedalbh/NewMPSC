@@ -143,6 +143,16 @@
       const destino = e.currentTarget.href;
       e.preventDefault(); clearTimeout(espera); await salvar(); window.location.href = destino;
     });
+    // enviar ao SIG: o rascunho sai com a última versão; trechos a completar pedem confirmação
+    document.getElementById("form-entregar")?.addEventListener("submit", async (e) => {
+      const formulario = e.currentTarget;
+      if (formulario.dataset.pronto) return;
+      e.preventDefault();
+      if (!podeSair("Enviar ao SIG")) return;
+      if (estado.textContent === "Alterada") { clearTimeout(espera); await salvar(); }
+      if (estado.classList.contains("erro")) return;   // não salvou: não envia a versão antiga
+      formulario.dataset.pronto = "1"; formulario.submit();
+    });
   }
 
   const copiar = document.getElementById("copiar");

@@ -17,7 +17,23 @@ navegador ── HTTPS ── servidor (FastAPI)
 | Porta | Hoje | Depois |
 | --- | --- | --- |
 | Motor | `MotorDemo` (padrão): esqueleto marcado, sem IA. `MotorClaude` (`app/motor_claude.py`): relatório dos autos pela API do Claude, só com dados fictícios | verificação de fontes, depois fundamentação; ficha de audiência; leitura de página digitalizada |
-| Conexão | `ConexaoPlanilha`: planilha do SIG entra, .docx sai | API do SIG ou MNI do eproc, se o MPSC abrir |
+| Conexão | `ConexaoPlanilha` (padrão): planilha do SIG entra, .docx sai. `ConexaoSigSimulado`: protótipo do envelope, só com dados fictícios | API do SIG ou MNI do eproc, se o MPSC abrir |
+
+## Envelope do SIG (protótipo)
+A ideia do produto é o promotor trabalhar só no NewMPSC, com o SIG por baixo: a fila chega sozinha e a peça volta para o SIG pronta para assinar. O SIG não oferece hoje uma integração para isso, então o protótipo usa um **SIG simulado** (`NEWMPSC_SIG=simulado`), que exercita o fluxo inteiro com dados fictícios.
+
+```
+        SIG (hoje: simulado)                     NewMPSC                          promotor
+  fila da promotoria ── buscar_fila ──▶  mesa por prioridade, minuta  ──▶  confere e corrige
+  rascunho sem assinatura ◀── entregar_rascunho ── "Enviar ao SIG"   ◀──  decide enviar
+        assinar e protocolar: sempre no SIG, pela pessoa
+```
+
+- **A porta tem três métodos:** `ler_fila` (planilha), `buscar_fila` (fila direta) e `entregar_rascunho` (minuta como rascunho, devolve o recibo). A integração oficial, quando existir, é uma classe nova com os mesmos três; telas e regras não mudam.
+- **O que o simulado faz:** devolve sempre a fila do arquivo fictício e um recibo sorteado. Não abre conexão nenhuma. O rascunho "entregue" fica na própria aplicação (`entregas_sig`: recibo, texto como foi, quantos trechos a completar), e é isso que a tela "SIG simulado" mostra, filtrado por usuário.
+- **O que continua valendo:** a aplicação não escreve no SIG nem no eproc (limite 2). O envio é sempre um ato da pessoa, vai sem assinatura, e assinar e protocolar ficam no SIG. Se a integração oficial vai poder depositar rascunho no SIG de verdade é decisão do titular (cartão C16).
+- **Travas:** o simulado não parte com dado real (na leitura do ambiente e na montagem da aplicação). Com a planilha, as rotas `/processos/buscar`, `/processos/{id}/entregar` e `/sig-simulado` respondem 404.
+- **Rascunho e prazo de guarda:** enviar conclui o processo, então o prazo do C1 começa a contar para os autos. O texto do rascunho fica com a minuta (C13). Devolver à fila apaga o rascunho.
 
 ## Segurança (referência: OWASP ASVS)
 - Senha com Argon2id, mínimo de 12 caracteres; resposta igual para e-mail inexistente e senha errada.
@@ -62,7 +78,7 @@ As decisões que são do titular estão em `docs/CARTOES.md`.
 2. Hospedagem e contrato institucionais; parecer de LGPD; registro de acessos.
 3. Migrações de banco (Alembic) e Postgres; limite de tentativas em armazenamento compartilhado.
 4. Segundo fator no login; troca de senha pela pessoa.
-5. Pauta lida do eproc ou do 365, em vez de digitada.
+5. Pauta lida do eproc ou do 365, em vez de digitada. Integração oficial com o SIG no lugar do simulado (C16) e autos vindos do eproc, em vez de PDF enviado à mão.
 6. Motor de IA, antes de dado real: contrato e parecer (C4), retenção do lado do fornecedor, retirar dados pessoais de terceiros antes do envio, teto de gasto no painel do fornecedor (C8).
 7. Prazo de guarda do registro de pedidos à IA (`pedidos_ia`) e exclusão junto com o processo e o usuário.
 8. Autos: exclusão de processo e de usuário; rever cota e limites com autos reais. Prazo de guarda (C1) e impressão com chave do servidor (C2) feitos na 0.4.0.

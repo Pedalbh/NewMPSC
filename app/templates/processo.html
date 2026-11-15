@@ -12,7 +12,8 @@
   <div class="proc-selos">
     {% if p.reu_preso %}<span class="selo erro">Réu preso</span>{% endif %}
     {% if p.vista %}<span class="selo {{ 'atencao' if p.vista | lower == 'urgente' }}">{{ p.vista }}</span>{% endif %}
-    {% if p.situacao == 'concluido' %}<span class="selo ok">Concluído</span>{% endif %}
+    {% if p.entrega %}<span class="selo ok">No SIG, para assinar</span>
+    {% elif p.situacao == 'concluido' %}<span class="selo ok">Concluído</span>{% endif %}
   </div>
 </section>
 
@@ -57,9 +58,28 @@
       {% if escrevendo %}
       <p class="fraco">Aguarde o relatório para baixar ou copiar.</p>
       {% else %}
-      <a class="btn {{ 'principal' if not (ia and minuta.motor == origem_em_branco) }} largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
+      {% set em_branco = ia and minuta.motor == origem_em_branco %}
+      {% if sig_direto %}
+      {% if p.entrega %}
+      <p class="pequeno" id="no-sig">No SIG simulado como rascunho desde {{ p.entrega.recebida_em | data }} às {{ p.entrega.recebida_em | hora }} (recibo {{ p.entrega.recibo }}). Falta assinar e protocolar lá.</p>
+      {% endif %}
+      <form method="post" action="/processos/{{ p.id }}/entregar" id="form-entregar">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn {{ 'principal' if not em_branco and not p.entrega }} largo" type="submit">{{ 'Enviar de novo ao SIG' if p.entrega else 'Enviar ao SIG' }}</button>
+      </form>
+      <p class="fraco pequeno">Vai como rascunho, sem assinatura. Você assina e protocola no SIG.</p>
+      <details>
+        <summary>Baixar ou copiar</summary>
+        <div class="pilha">
+          <a class="btn largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar em Word (.docx)</a>
+          <button class="btn largo" type="button" id="copiar" data-origem="/processos/{{ p.id }}/minuta.txt">Copiar texto</button>
+        </div>
+      </details>
+      {% else %}
+      <a class="btn {{ 'principal' if not em_branco }} largo" href="/processos/{{ p.id }}/minuta.docx" id="baixar-docx">Baixar para o SIG (.docx)</a>
       <button class="btn largo" type="button" id="copiar" data-origem="/processos/{{ p.id }}/minuta.txt">Copiar texto</button>
       <p class="fraco pequeno">O arquivo sai no padrão do Manual de Redação do MPSC. No SIG, abra o Word, copie e cole no editor.</p>
+      {% endif %}
       {% if p.tarefa and p.tarefa.estado == 'pronta' and p.tarefa.pontos and de_ia %}
       <h3>Pontos a enfrentar</h3>
       <ul class="lista pequeno" id="pontos">
@@ -164,7 +184,7 @@
         <input type="hidden" name="csrf" value="{{ csrf }}">
         {% if p.situacao == 'a_fazer' %}
         <input type="hidden" name="situacao" value="concluido">
-        <button class="btn largo" type="submit">Marcar como concluído</button>
+        <button class="btn largo" type="submit">{{ 'Concluir sem enviar' if sig_direto else 'Marcar como concluído' }}</button>
         {% else %}
         <input type="hidden" name="situacao" value="a_fazer">
         <button class="btn largo" type="submit">Devolver à fila</button>

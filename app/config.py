@@ -7,6 +7,7 @@ import secrets
 from dataclasses import dataclass
 
 AMBIENTES = ("desenvolvimento", "teste", "producao")
+CONEXOES_SIG = ("planilha", "simulado")
 
 
 @dataclass(frozen=True)
@@ -17,6 +18,7 @@ class Config:
     motor: str
     dados_ficticios: bool
     modelo: str = ""
+    sig: str = "planilha"   # planilha | simulado (protótipo do envelope; só com dados fictícios)
 
     @property
     def producao(self) -> bool:
@@ -44,6 +46,12 @@ def carregar(env=None) -> Config:
     if motor != "demo" and not ficticios:
         # Cartão C4: texto de processo real só vai para um serviço de IA depois de contrato institucional.
         raise RuntimeError("motor de IA só com dados fictícios: dado real depende de contrato institucional")
+    sig = env.get("NEWMPSC_SIG", "planilha")
+    if sig not in CONEXOES_SIG:
+        raise RuntimeError(f"NEWMPSC_SIG inválido: use um de {CONEXOES_SIG}")
+    if sig == "simulado" and not ficticios:
+        # Limites 1 e 2: o SIG simulado é protótipo; com dado real só entra a integração oficial.
+        raise RuntimeError("SIG simulado só com dados fictícios: com dado real, a planilha ou a integração oficial")
     if not segredo:
         logging.getLogger("newmpsc").warning(
             "NEWMPSC_SEGREDO não definido: sessões e impressões dos autos mudam a cada partida")
@@ -55,4 +63,5 @@ def carregar(env=None) -> Config:
         # Enquanto não houver hospedagem e contrato institucionais, a aplicação só trabalha com dados fictícios.
         dados_ficticios=ficticios,
         modelo=env.get("NEWMPSC_MODELO", ""),
+        sig=sig,
     )

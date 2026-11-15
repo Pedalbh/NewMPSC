@@ -149,6 +149,13 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .arquivo-nome { font-weight: 500; overflow-wrap: anywhere; }
 .arquivo-selos { display: flex; flex-wrap: wrap; gap: var(--e2); margin-top: var(--e1); }
 .arquivos .btn { min-height: 44px; }
+.recebidas { display: flex; flex-direction: column; }
+.recebidas li + li { border-top: 1px solid var(--linha); }
+.recebidas summary { display: flex; flex-wrap: wrap; align-items: center; gap: var(--e3); color: var(--tinta); }
+.recebidas summary::before { content: "›"; color: var(--tinta-fraca); font-size: 20px; transition: transform var(--rapido); }
+.recebidas details[open] > summary::before { transform: rotate(90deg); }
+.recebidas summary::-webkit-details-marker { display: none; }
+.rascunho { margin: 0 0 var(--e3); padding: var(--e4); border-radius: var(--raio-p); background: var(--relevo); font: 400 13px/20px var(--fonte); white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow-y: auto; }
 .agenda { display: flex; flex-direction: column; margin: 0 calc(-1 * var(--e2)); }
 .agenda a { display: flex; align-items: center; gap: var(--e4); padding: var(--e2); border-radius: var(--raio-m); }
 .agenda a:hover { background: var(--relevo); }

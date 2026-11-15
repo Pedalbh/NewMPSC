@@ -17,7 +17,43 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 
 ## Abertos
 
-Nenhum.
+### C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho?
+- **Por que é sua:** regras do projeto. O limite 2 diz que nada aqui escreve no SIG.
+- **Hoje:** o protótipo (0.5.0) mostra o botão "Enviar ao SIG", mas só contra um SIG simulado, com dados fictícios. Nada chega ao SIG de verdade. A integração oficial não existe; a pergunta define o que se pede à TI.
+- **Opções:**
+  - **A. Sim, só rascunho.** Por ato do usuário, sem assinatura, só pela integração oficial. Assinar e protocolar continuam no SIG, pela pessoa.
+    **Depois da decisão:** o coordenador ajusta o texto do limite 2 no `CLAUDE.md` ("não assina nem protocola; deixa rascunho só por ato do usuário e só pela integração oficial") e leva à TI o pedido de duas operações: ler a fila e depositar rascunho.
+  - **B. Não.** A integração oficial só lê a fila; a peça segue saindo por arquivo ou cópia.
+    **Depois da decisão:** o coordenador troca, no protótipo, "Enviar ao SIG" por "Copiar para o SIG", ajusta a apresentação e o plano do piloto, e leva à TI só o pedido de leitura.
+  - **C. Decidir depois de ouvir a TI.**
+    **Depois da decisão:** o protótipo fica como está, marcado como demonstração; o coordenador leva as duas possibilidades à TI e traz a resposta em cartão novo.
+- **Recomendo:** A. Tira a cópia manual, que é onde se perde tempo e se cola texto errado, sem tirar da pessoa a assinatura nem o protocolo.
+- **O que espera:** a pauta da conversa com a TI. Nada no código espera.
+
+### C17 · O piloto: quais promotorias, e quando o plano vai à Administração?
+- **Por que é sua:** rumo do produto e dado real.
+- **Contexto:** o plano está em `docs/PILOTO.md`: três promotorias criminais, quatro fases com portão, dado real só depois de hospedagem, parecer e contrato. A Fase 1 usa só dados fictícios e pode começar já.
+- **Opções:**
+  - **A. Aprovar o plano com três promotorias.** A sua e duas convidadas por você.
+    **Depois da decisão:** o coordenador prepara o roteiro e o guia de uma página da Fase 1, um servidor de ensaio com dados fictícios para os convidados, e passa a construir os itens de produto da Fase 2 na ordem do plano.
+  - **B. Começar só pela sua promotoria.** Um piloto de um, e ampliar depois da Fase 2.
+    **Depois da decisão:** o mesmo da opção A, com um participante; o plano é reescrito com as outras duas entrando na Fase 3.
+  - **C. Ainda não.** Terminar antes a verificação de fontes (etapa 3) e só então falar em piloto.
+    **Depois da decisão:** o plano fica guardado; o coordenador segue na etapa 3.
+- **Recomendo:** A. A Fase 1 não depende de ninguém de fora e é a evidência que sustenta a conversa com a Administração.
+- **O que espera:** as Fases 0 e 1 do piloto.
+- **O que você faz:** convidar as duas promotorias; apresentar o projeto à Administração, à TI e ao encarregado de dados.
+
+### C18 · Promotor e assessor da mesma promotoria veem os mesmos processos?
+- **Por que é sua:** regras do projeto. O limite 3 diz que cada usuário vê só o que é seu.
+- **Hoje:** cada conta tem a sua mesa. Um assessor não consegue preparar a minuta que o promotor vai conferir, a não ser usando a conta dele, o que não se deve fazer.
+- **Opções:**
+  - **A. Espaço da promotoria.** Quem é da mesma promotoria vê a mesma mesa; ninguém de fora vê. Só o promotor envia ao SIG.
+    **Depois da decisão:** o coordenador ajusta o limite 3 no `CLAUDE.md` ("cada promotoria vê só o que é seu") e constrói o espaço com teste de isolamento entre promotorias e os três revisores, antes da Fase 2.
+  - **B. Manter como está.** No piloto, só o promotor usa.
+    **Depois da decisão:** o plano do piloto passa a contar só promotores, e a medição de tempo fica restrita ao trabalho deles.
+- **Recomendo:** A. Sem isso o piloto mede um jeito de trabalhar que não é o das promotorias com assessor.
+- **O que espera:** o início da Fase 2 nas promotorias com assessor.
 
 ## Decididos
 
