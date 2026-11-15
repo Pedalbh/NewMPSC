@@ -23,8 +23,9 @@ CHROME = os.environ.get("NEWMPSC_CHROME", "")
 PRINTS = os.environ.get("NEWMPSC_PRINTS")
 
 
-def _servir(pasta, motor_nome="demo", **opcoes):
-    app = criar_app(Config("teste", "s" * 40, f"sqlite:///{pasta / 'newmpsc.db'}", motor_nome, True), **opcoes)
+def _servir(pasta, motor_nome="demo", sig="planilha", **opcoes):
+    app = criar_app(Config("teste", "s" * 40, f"sqlite:///{pasta / 'newmpsc.db'}", motor_nome, True, sig=sig),
+                    **opcoes)
     with app.state.Sessao() as db:
         criar_usuario(db, "ana@exemplo.invalid", "Ana Exemplo", SENHA, "Promotora de Justiça")
     with socket.socket() as s:
@@ -63,6 +64,14 @@ def endereco_ia(tmp_path_factory):
                 "pontos_a_enfrentar": ["Há prova da autoria?"]}
     servidor, url = _servir(tmp_path_factory.mktemp("banco-ia"), "claude",
                             motor=MotorClaude(ClienteLento(resposta=resposta)))
+    yield url
+    servidor.should_exit = True
+
+
+@pytest.fixture(scope="module")
+def endereco_sig(tmp_path_factory):
+    """Servidor com o SIG simulado: a fila chega e a minuta volta sem arquivo."""
+    servidor, url = _servir(tmp_path_factory.mktemp("banco-sig"), sig="simulado")
     yield url
     servidor.should_exit = True
 
@@ -107,7 +116,7 @@ def test_jornada_completa(endereco, pagina):
 
     # trazer a planilha: escolher o arquivo já envia
     pg.set_input_files("#planilha", str(FILA))
-    pg.get_by_text("9 processo(s) novo(s)").wait_for()
+    pg.get_by_text("9 processos novos").wait_for()
     assert pg.locator(".fila .proc").count() == 9
     assert pg.locator(".fila .proc .num").first.inner_text() == "0000101-00.2026.8.24.0000"
     foto(pg, "3-mesa-com-fila")
@@ -292,4 +301,122 @@ def test_relatorio_escrito_pelo_motor_de_ia(endereco_ia, pagina):
     assert pg.evaluate("document.querySelector('#resultado-escrita').getBoundingClientRect().top < "
                        "document.querySelector('#folha').getBoundingClientRect().top")
     foto(pg, "15-relatorio-celular")
+    assert pg.erros == [], pg.erros
+
+
+def test_envelope_do_sig_simulado(endereco_sig, pagina):
+    """O fluxo sem arquivo: buscar a fila no SIG, corrigir a minuta, enviar como rascunho e ver o outro lado."""
+    pg = pagina
+    pg.set_viewport_size({"width": 1360, "height": 900})
+    pg.context.clear_cookies()
+    pg.goto(endereco_sig)
+    pg.get_by_label("E-mail").fill("ana@exemplo.invalid")
+    pg.get_by_label("Senha").fill(SENHA)
+    pg.get_by_role("button", name="Entrar").click()
+    pg.get_by_text("Use Buscar no SIG simulado").wait_for()
+    sync_api.expect(pg.locator(".faixa")).to_contain_text("SIG simulado")
+    foto(pg, "16-sig-mesa-vazia")
+    # no celular, com a mesa vazia, o botão de buscar fica à vista sem rolar
+    pg.set_viewport_size({"width": 390, "height": 800})
+    sync_api.expect(pg.get_by_role("button", name="Buscar no SIG simulado")).to_be_in_viewport()
+    foto(pg, "16b-sig-celular-mesa-vazia")
+    pg.set_viewport_size({"width": 1360, "height": 900})
+
+    # um clique traz a fila, sem exportar nem escolher arquivo
+    pg.get_by_role("button", name="Buscar no SIG simulado").click()
+    pg.get_by_text("9 processos novos").wait_for()
+    assert pg.locator(".fila .proc").count() == 9
+    foto(pg, "17-sig-fila")
+
+    # abrir, corrigir e enviar: o rascunho leva a última versão digitada, sem esperar o salvamento automático
+    pg.locator(".fila .proc").first.click()
+    pg.locator("#folha").wait_for()
+    enviar = pg.get_by_role("button", name="Enviar ao SIG simulado")
+    sync_api.expect(enviar).to_be_in_viewport()
+    sync_api.expect(pg.get_by_role("button", name="Concluir sem enviar ao SIG")).to_be_in_viewport()
+    # com trechos a completar, a contagem aparece e o envio não é a ação principal
+    sync_api.expect(pg.locator("#trechos")).to_have_text("5 trechos entre colchetes a completar")
+    assert "principal" not in enviar.get_attribute("class")
+    assert pg.get_by_role("link", name="Baixar em Word").is_hidden()   # a saída por arquivo fica recolhida
+    foto(pg, "18-sig-minuta")
+    pg.locator("#folha .b-corpo").first.click()
+    pg.keyboard.press("End")
+    pg.keyboard.type(" Frase do envelope.")
+    # a contagem acompanha a digitação: completar um trecho baixa o número
+    pg.locator("#folha .b-centro").click()
+    pg.keyboard.press("Control+Home")   # início do fecho: "[COMARCA], data da assinatura digital."
+    for _ in range(len("[COMARCA]")):
+        pg.keyboard.press("Shift+ArrowRight")
+    pg.keyboard.type("Cidade Fictícia")
+    sync_api.expect(pg.locator("#trechos")).to_have_text("4 trechos entre colchetes a completar")
+    perguntas = []
+    pg.once("dialog", lambda d: (perguntas.append(d.message), d.dismiss()))
+    enviar.click()
+    assert "entre colchetes a completar. Enviar ao SIG assim mesmo?" in perguntas[0]
+    assert "/processos/" in pg.url   # recusou: continua no processo
+    pg.once("dialog", lambda d: d.accept())
+    enviar.click()
+    pg.get_by_text("como rascunho (recibo SIM-").wait_for()
+    sync_api.expect(pg.get_by_text("Falta você assinar e protocolar no SIG.")).to_be_visible()
+    sync_api.expect(pg.get_by_role("link", name="Abrir o processo enviado")).to_be_visible()
+    assert pg.locator(".fila .proc").count() == 8
+    foto(pg, "19-sig-enviada")
+
+    # o outro lado: o SIG simulado mostra o rascunho, sem assinatura, com o texto digitado
+    pg.get_by_role("link", name="SIG simulado").click()
+    pg.get_by_role("heading", name="Rascunhos recebidos").wait_for()
+    assert pg.locator(".recebidas li").count() == 1
+    sync_api.expect(pg.locator(".recebidas .selo", has_text="Sem assinatura")).to_be_visible()
+    sync_api.expect(pg.locator("#conta-fila")).to_have_text(
+        "0 só no SIG · 8 no NewMPSC · 1 com rascunho recebido")
+    pg.locator(".recebidas summary").click()
+    rascunho = pg.locator(".folha.recebida")
+    sync_api.expect(rascunho).to_contain_text("Frase do envelope.")
+    # o rascunho chega com a formatação da folha, e não é editável do lado do SIG
+    assert rascunho.locator(".b-endereco").evaluate("e => getComputedStyle(e).fontWeight") == "700"
+    assert rascunho.locator("[contenteditable]").count() == 0
+    assert pg.evaluate("CSS.highlights.get('marca').size") == 4   # os trechos a completar, destacados como na mesa
+    foto(pg, "20-sig-outro-lado")
+    pg.emulate_media(color_scheme="dark")
+    pg.wait_for_timeout(300)   # a troca de tema tem transição de cor
+    aba = pg.locator(".aba[aria-current]")
+    assert aba.evaluate("e => getComputedStyle(e).backgroundColor != getComputedStyle(e).color")
+    foto(pg, "20b-sig-outro-lado-escuro")
+    pg.emulate_media(color_scheme="light")
+    pg.set_viewport_size({"width": 390, "height": 800})
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    foto(pg, "20c-sig-celular-rascunho")
+    pg.set_viewport_size({"width": 1360, "height": 900})
+
+    # na mesa, o processo concluído diz onde está; devolver à fila retira o rascunho
+    pg.get_by_role("link", name="Abrir na mesa").click()
+    sync_api.expect(pg.locator("#no-sig")).to_contain_text("Falta assinar e protocolar lá.")
+    troca = pg.get_by_role("button", name="Trocar o rascunho no SIG")
+    sync_api.expect(troca).to_be_visible()
+    assert troca.evaluate("e => e.getBoundingClientRect().height") <= 46   # o texto cabe numa linha
+    assert pg.locator("#mudou").count() == 0
+    # desfazer fica junto do envio, à vista, sem rolar a coluna lateral
+    sync_api.expect(pg.get_by_role("button", name="Tirar do SIG e voltar à mesa")).to_be_in_viewport()
+    # mexer na minuta depois do envio avisa que o rascunho no SIG ficou para trás
+    pg.locator("#folha .b-corpo").first.click()
+    pg.keyboard.press("Control+End")
+    pg.keyboard.type(" Depois do envio.")
+    pg.locator("#estado-salvar", has_text="Salva às").wait_for()
+    pg.reload()
+    sync_api.expect(pg.locator("#mudou")).to_contain_text("A minuta mudou depois do envio.")
+    foto(pg, "21-sig-processo-enviado")
+    pg.get_by_role("button", name="Tirar do SIG e voltar à mesa").click()
+    pg.get_by_text("O rascunho saiu do SIG simulado.").wait_for()
+    pg.get_by_role("link", name="SIG simulado").click()
+    pg.get_by_text("Nenhum rascunho recebido").wait_for()
+
+    # celular: sem rolagem lateral nas duas telas novas
+    pg.set_viewport_size({"width": 390, "height": 800})
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    foto(pg, "22-sig-celular-outro-lado")
+    pg.goto(endereco_sig)
+    pg.locator(".fila .proc").first.wait_for()
+    assert pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth")
+    foto(pg, "23-sig-celular-mesa")
+    pg.set_viewport_size({"width": 1360, "height": 900})
     assert pg.erros == [], pg.erros

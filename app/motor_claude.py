@@ -42,7 +42,7 @@ SEM_PAGINA, CITACAO, NAO_RELATORIO = "[CONFERIR: sem página]", "[CONFERIR: cita
 _CITACAO = re.compile(
     r"\b(art(igo)?s?\.?\s*\d|artigo\s+\w+|lei\s*(n\.?\s*[ºo°]?|complementar|federal|estadual)?\s*\d|s[úu]mula|"
     r"tema\s+(n\.?\s*[ºo°]?\s*)?\d|STF|STJ|TJ[A-Z]{2}|TRF|supremo|superior\s+tribunal|tribunal\s+de\s+justi[çc]a|"
-    r"C(P|PP|F|TB|PM|PPM)\b|HC\s*n?\.?\s*\d|REsp|RE\s+\d|c[óo]digo\s+(penal|de\s+processo|de\s+tr[âa]nsito)|"
+    r"C(P|PP|F|TB|PM|PPM)\b|HC\s*n?\.?\s*\d|REsps?\b|RE\s+\d|c[óo]digo\s+(penal|de\s+processo|de\s+tr[âa]nsito)|"
     r"constitui[çc][ãa]o\s+federal|jurisprud[êe]ncia|corte\s+superior|AgRg|EDcl|RHC)", re.IGNORECASE)
 # fórmula de fecho, ou o Ministério Público pedindo: "a defesa requereu" é fato dos autos e não é marcado
 _PEDIDO = re.compile(

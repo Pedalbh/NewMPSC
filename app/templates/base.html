@@ -12,7 +12,7 @@
 </head>
 <body>
 <a class="pular" href="#conteudo">Pular para o conteúdo</a>
-{% if config.dados_ficticios %}<div class="faixa" role="note">Ambiente de teste · só dados fictícios</div>{% endif %}
+{% if config.dados_ficticios %}<div class="faixa" role="note">Ambiente de teste · só dados fictícios{% if sig_direto %} · SIG simulado{% endif %}</div>{% endif %}
 {% if usuario is defined %}
 <header class="topo">
   <div class="topo-dentro">
@@ -20,6 +20,7 @@
     <nav aria-label="Principal">
       <a class="aba" href="/" {% if pagina == 'processos' %}aria-current="page"{% endif %}>Processos</a>
       <a class="aba" href="/audiencias" {% if pagina == 'audiencias' %}aria-current="page"{% endif %}>Audiências</a>
+      {% if sig_direto %}<a class="aba" href="/sig-simulado" {% if pagina == 'sig' %}aria-current="page"{% endif %}>SIG simulado</a>{% endif %}
     </nav>
     <div class="conta">
       <a class="conta-nome" href="/configuracoes" {% if pagina == 'configuracoes' %}aria-current="page"{% endif %}>
@@ -38,6 +39,7 @@
 {% if aviso and not aviso.local %}
 <div class="aviso {{ aviso.tipo }}" role="status">
   {% for t in aviso.textos %}<p>{{ t }}</p>{% endfor %}
+  {% if aviso.elo %}<p><a class="elo-aviso" href="{{ aviso.elo[1] }}">{{ aviso.elo[0] }}</a></p>{% endif %}
 </div>
 {% endif %}
 {% block conteudo %}{% endblock %}

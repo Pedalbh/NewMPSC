@@ -61,17 +61,30 @@
   const MARCA = /\[(?:(?:CONFERIR|ESCREVER|DEFINIR)[^\]]*|COMARCA|DEMONSTRAÇÃO)\]/g;
   const pendentes = () => (folha ? (folha.innerText.match(MARCA) || []).length : 0);
   const destacar = () => {   // pinta as marcas sem mexer no texto editável
-    if (!folha || !window.Highlight || !CSS.highlights) return;
+    if (!window.Highlight || !CSS.highlights) return;
     const trechos = [];
-    const nos = document.createTreeWalker(folha, NodeFilter.SHOW_TEXT);
-    for (let no = nos.nextNode(); no; no = nos.nextNode()) {
-      for (const achado of no.data.matchAll(MARCA)) {
-        const trecho = new Range();
-        trecho.setStart(no, achado.index); trecho.setEnd(no, achado.index + achado[0].length);
-        trechos.push(trecho);
+    document.querySelectorAll(".folha").forEach((papel) => {   // a folha da mesa e os rascunhos recebidos
+      const nos = document.createTreeWalker(papel, NodeFilter.SHOW_TEXT);
+      for (let no = nos.nextNode(); no; no = nos.nextNode()) {
+        for (const achado of no.data.matchAll(MARCA)) {
+          const trecho = new Range();
+          trecho.setStart(no, achado.index); trecho.setEnd(no, achado.index + achado[0].length);
+          trechos.push(trecho);
+        }
       }
-    }
+    });
     CSS.highlights.set("marca", new Highlight(...trechos));
+  };
+  // enviar ao SIG: a contagem dos trechos a completar acompanha a digitação, e o envio só é a ação principal sem eles
+  const contar = () => {
+    const aviso = document.getElementById("trechos");
+    const enviar = document.getElementById("enviar-sig");
+    if (!aviso || !enviar) return;
+    const n = pendentes();
+    aviso.hidden = !n;
+    aviso.parentElement.hidden = !n && !document.getElementById("mudou");
+    aviso.textContent = n === 1 ? "1 trecho entre colchetes a completar" : n + " trechos entre colchetes a completar";
+    enviar.classList.toggle("principal", !n && "principal" in enviar.dataset);
   };
   const podeSair = (acao) => {
     const n = pendentes();
@@ -102,7 +115,7 @@
       if (pendente) salvar();
     };
     const agendar = () => {
-      marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar();
+      marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar(); contar();
     };
 
     folha.addEventListener("input", agendar);
@@ -142,6 +155,28 @@
       if (estado.textContent !== "Alterada") return;
       const destino = e.currentTarget.href;
       e.preventDefault(); clearTimeout(espera); await salvar(); window.location.href = destino;
+    });
+    // voltar pelo navegador devolve a página guardada: o envio precisa estar liberado de novo
+    window.addEventListener("pageshow", (e) => {
+      const formulario = document.getElementById("form-entregar");
+      if (!e.persisted || !formulario) return;
+      delete formulario.dataset.pronto;
+      formulario.querySelector("button").disabled = false;
+    });
+    // enviar ao SIG: o rascunho sai com a última versão; trechos a completar pedem confirmação
+    document.getElementById("form-entregar")?.addEventListener("submit", async (e) => {
+      const formulario = e.currentTarget;
+      if (formulario.dataset.pronto) return;
+      e.preventDefault();
+      if (!podeSair("Enviar ao SIG")) return;
+      const botao = formulario.querySelector("button");
+      botao.disabled = true;   // um envio só, mesmo com clique duplo
+      clearTimeout(espera);
+      if (estado.textContent === "Alterada") salvar();
+      // espera o salvamento em curso e o que ficou pendente atrás dele: o rascunho leva o que está na tela
+      while (salvando || pendente) await new Promise((r) => setTimeout(r, 50));
+      if (estado.classList.contains("erro")) { botao.disabled = false; return; }   // não salvou: não envia
+      formulario.dataset.pronto = "1"; formulario.submit();
     });
   }
 

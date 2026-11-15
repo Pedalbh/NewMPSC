@@ -97,6 +97,7 @@ main.estreito { max-width: 640px; }
 .btn.discreto:hover { background: var(--relevo); color: var(--tinta); }
 .btn.perigo { color: var(--erro); border-color: var(--erro); }
 .btn.largo { width: 100%; }
+.btn:disabled { opacity: .55; cursor: default; }
 .selo { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: var(--raio-total); font: 600 11px/16px var(--fonte); letter-spacing: .05em; text-transform: uppercase; background: var(--relevo); color: var(--tinta-fraca); white-space: nowrap; }
 .selo.ok { background: var(--ok-fundo); color: var(--ok); }
 .selo.atencao { background: var(--atencao-fundo); color: var(--atencao); }
@@ -149,6 +150,16 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .arquivo-nome { font-weight: 500; overflow-wrap: anywhere; }
 .arquivo-selos { display: flex; flex-wrap: wrap; gap: var(--e2); margin-top: var(--e1); }
 .arquivos .btn { min-height: 44px; }
+.recebidas { display: flex; flex-direction: column; }
+.recebidas li + li { border-top: 1px solid var(--linha); }
+.recebidas summary { color: var(--tinta); }
+.recebidas summary > * { vertical-align: middle; margin-right: var(--e2); }
+.recebidas summary .arquivo-selos { display: inline-flex; margin-top: 0; }
+.folha.recebida { min-height: 0; max-height: 70vh; overflow-y: auto; margin: 0 0 var(--e3); }
+.passos { display: flex; flex-wrap: wrap; gap: var(--e2) var(--e5); color: var(--tinta-fraca); font-weight: 500; }
+.passos li { display: inline-flex; align-items: center; gap: var(--e2); }
+.passo-n { width: 24px; height: 24px; border-radius: 50%; background: var(--relevo); color: var(--tinta); display: inline-grid; place-items: center; font: 600 13px/1 var(--fonte); }
+.elo-aviso { font-weight: 600; text-decoration: underline; }
 .agenda { display: flex; flex-direction: column; margin: 0 calc(-1 * var(--e2)); }
 .agenda a { display: flex; align-items: center; gap: var(--e4); padding: var(--e2); border-radius: var(--raio-m); }
 .agenda a:hover { background: var(--relevo); }
@@ -195,6 +206,7 @@ ul.lista { list-style: disc; } ol.lista { list-style: decimal; }
   h1 { font-size: 24px; line-height: 32px; }
   .folha { padding: 32px 20px; }
   .folha .b-corpo { text-indent: 1.5cm; }
+  .grade.mesa-vazia > .lateral { order: -1; }   /* mesa vazia: o botão de buscar vem antes do cartão vazio */
   .proc-data, .proc .seta { display: none; }
   .proc { flex-wrap: wrap; gap: var(--e2) var(--e3); }
   .proc-texto { flex: 1 1 0; }

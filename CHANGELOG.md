@@ -2,6 +2,30 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.5.0] - 2026-11-15
+
+### Adicionado
+- Protótipo do envelope do SIG (`NEWMPSC_SIG=simulado`, só com dados fictícios): um SIG simulado faz o papel do SIG para mostrar o fluxo sem arquivo. Nada chega ao SIG de verdade nem ao eproc.
+- Na mesa, o botão "Buscar no SIG" traz a fila com um clique. A planilha exportada continua disponível, recolhida.
+- Na tela do processo, "Enviar ao SIG" deixa a minuta no SIG simulado como rascunho, sem assinatura, com recibo, e tira o processo da mesa. Assinar e protocolar continuam sendo da pessoa, no SIG. Trechos entre colchetes pedem confirmação antes do envio e vão contados no recibo.
+- Tela "SIG simulado": o outro lado, com a fila que o SIG tem e os rascunhos que recebeu, cada um com o texto como chegou.
+- Devolver o processo à fila retira o rascunho do SIG simulado; enviar de novo troca o rascunho. A tela avisa quando a minuta muda depois do envio.
+- O rascunho chega ao SIG simulado com a formatação da folha. A contagem dos trechos a completar aparece acima do botão de enviar e acompanha a digitação.
+- Se o SIG simulado não responde, a tela diz o que fazer e nada muda na mesa.
+- Plano do piloto em promotorias criminais (`docs/PILOTO.md`) e três cartões novos para o titular (C16, C17 e C18).
+
+### Alterado
+- Os avisos de importação flexionam o número ("1 processo novo", "9 processos novos").
+
+### Corrigido
+- A marca "[CONFERIR: citação]" não dispara mais em palavras como "resposta" e "respeito" (o padrão de "REsp" casava com o começo da palavra).
+
+### Segurança
+- `NEWMPSC_DADOS_FICTICIOS` só aceita `0` ou `1`; qualquer outro valor impede a partida. Antes, `false` ou vazio passavam por "fictício" e soltavam as travas do motor de IA e do SIG simulado.
+- O SIG simulado não liga com dado real, nem pelo ambiente nem montando a aplicação por código. Processo com número real não é enviado em servidor de dados fictícios.
+- A porta do SIG recebe quem pede a fila e quem envia o rascunho: a integração oficial age com a identidade da pessoa, não com conta de serviço. Com a planilha (o padrão), as rotas da busca direta não existem.
+- Rascunhos e fila do SIG simulado são filtrados por usuário, com teste de isolamento.
+
 ## [0.4.1] - 2026-11-14
 
 ### Alterado

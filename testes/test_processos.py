@@ -17,7 +17,7 @@ def test_prioridade_da_fila():
 def test_importar_planilha_cria_fila_ordenada_com_minuta(logada):
     assert logada.importar_fila().status_code == 303
     html = logada.get("/").text
-    assert "9 processo(s) novo(s)" in html
+    assert "9 processos novos" in html
     ordem = numeros_na_ordem(html)
     assert len(ordem) == 9
     # réu preso primeiro (mais antigo antes), depois urgentes, depois intimações, por último os demais
@@ -34,7 +34,7 @@ def test_importar_de_novo_nao_duplica_nem_apaga_edicao(logada):
                headers={"X-CSRF-Token": token})
     logada.importar_fila()
     html = logada.get("/").text
-    assert "9 já estava(m) na fila" in html and len(numeros_na_ordem(html)) == 9
+    assert "9 já estavam na fila" in html and len(numeros_na_ordem(html)) == 9
     assert "Texto meu." in logada.get("/processos/1").text
 
 
@@ -58,7 +58,7 @@ def test_colar_numeros_aceita_texto_solto_e_ignora_repetidos(logada):
     texto = "Seguem: 0000201-00.2026.8.24.0000, 0000202-00.2026.8.24.0000 e de novo 0000201-00.2026.8.24.0000."
     logada.enviar("/processos/colar", {"numeros": texto})
     html = logada.get("/").text
-    assert "2 processo(s) novo(s)" in html and len(numeros_na_ordem(html)) == 2
+    assert "2 processos novos" in html and len(numeros_na_ordem(html)) == 2
 
 
 def test_colar_sem_numero_avisa(logada):

@@ -474,7 +474,7 @@ def test_mensagem_da_importacao_nao_promete_minuta_pronta(app_ia):
         c.entrar("ana@exemplo.invalid")
         assert "pronto para receber os autos" in c.get("/").text
         c.importar_fila()
-        assert "9 processo(s) novo(s), prontos para receber os autos." in c.get("/").text
+        assert "9 processos novos, prontos para receber os autos." in c.get("/").text
 
 
 def test_pedir_o_relatorio_troca_a_minuta_registra_o_pedido_e_avisa_que_e_de_ia(ana_ia, cliente_ia, banco_ia):
@@ -745,3 +745,16 @@ def test_falha_no_meio_da_resposta_registra_o_modelo_pedido(ana_ia, cliente_ia, 
     ana_ia.enviar("/processos/1/escrever")
     banco_ia.expire_all()
     assert banco_ia.scalar(select(PedidoIA.modelo)) == "claude-opus-5-5"
+
+
+def test_resposta_nao_e_citacao_mas_resp_continua_marcado():
+    """Achado em uso: "REsp" sem fim de palavra marcava "resposta", "responde" e "respeito" como citação."""
+    from app.motor_claude import _CITACAO
+    for fato in ("Na resposta à acusação, a defesa pede a absolvição.", "A testemunha respondeu às perguntas.",
+                 "O laudo diz respeito ao objeto apreendido."):
+        assert not _CITACAO.search(fato), fato
+    for citacao in ("Conforme o REsp 1.234.567.", "Nos REsps citados pela defesa.", "(REsp n. 1)", "resp 123"):
+        assert _CITACAO.search(citacao), citacao
+    m = escrever({"relatorio": [{"texto": "Na resposta à acusação, a defesa pede a absolvição.",
+                                 "fontes": [{"arquivo": 1, "pagina": 1}]}], "pontos_a_enfrentar": []})
+    assert not any("[CONFERIR: citação]" in t for t in textos_de(m))

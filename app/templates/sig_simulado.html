@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block titulo %}SIG simulado · NewMPSC{% endblock %}
+{% block conteudo %}
+<section class="saudacao">
+  <h1>SIG simulado</h1>
+  <p class="fraco">O outro lado: o que o SIG tem para você e o que recebeu de você. É uma simulação com dados fictícios; nada aqui chega ao SIG de verdade.</p>
+</section>
+<ol class="passos" aria-label="O caminho de um processo">
+  <li><span class="passo-n" aria-hidden="true">1</span>Buscar a fila</li>
+  <li><span class="passo-n" aria-hidden="true">2</span>Corrigir e enviar o rascunho</li>
+  <li><span class="passo-n" aria-hidden="true">3</span>Assinar e protocolar no SIG, fora daqui</li>
+</ol>
+<div class="grade">
+  <section class="cartao principal" aria-labelledby="t-recebidas">
+    <div class="linha">
+      <h2 id="t-recebidas">Rascunhos recebidos</h2>
+      <span class="selo empurra">{{ entregas | length }}</span>
+    </div>
+    {% if entregas %}
+    <ul class="recebidas">
+      {% for e in entregas %}
+      <li>
+        <details>
+          <summary>
+            <span class="num">{{ e.processo.numero }}</span>
+            <span class="fraco pequeno">{{ e.tipo }} · recibo {{ e.recibo }} · {{ e.recebida_em | data }} às {{ e.recebida_em | hora }}</span>
+            <span class="arquivo-selos">
+              {% if e.pendentes %}<span class="selo atencao">{{ e.pendentes }} a completar</span>{% endif %}
+              <span class="selo">Sem assinatura</span>
+            </span>
+          </summary>
+          <div class="folha recebida" tabindex="0" role="group" aria-label="Texto do rascunho de {{ e.processo.numero }}">
+            {% for b in e.blocos %}<p class="b b-{{ b.estilo }}">{{ b.texto }}</p>{% endfor %}
+          </div>
+          <p class="fraco pequeno">No SIG de verdade, é aqui que você confere, assina e protocola. <a class="elo" href="/processos/{{ e.processo_id }}">Abrir na mesa</a></p>
+        </details>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="vazio">
+      <p class="vazio-titulo">Nenhum rascunho recebido</p>
+      <p class="fraco">Abra um processo na mesa e use Enviar ao SIG simulado. A minuta aparece aqui, sem assinatura.</p>
+    </div>
+    {% endif %}
+  </section>
+
+  <div class="lateral pilha-cartoes">
+    <section class="cartao" aria-labelledby="t-fila-sig">
+      <h2 id="t-fila-sig">Fila no SIG</h2>
+      <p class="fraco pequeno" id="conta-fila">{{ conta.sig }} só no SIG · {{ conta.mesa }} no NewMPSC · {{ conta.rascunho }} com rascunho recebido</p>
+      <ul class="arquivos">
+        {% for l, estado in estados %}
+        <li>
+          <div class="arquivo-texto">
+            <span class="num">{{ l.judiciario }}</span>
+            <span class="fraco pequeno">{{ l.classe }}{% if l.assunto %} · {{ l.assunto }}{% endif %}</span>
+            <span class="arquivo-selos">
+              {% if estado == 'rascunho' %}<span class="selo atencao">Rascunho recebido · {{ recibos[l.judiciario] }}</span>
+              {% elif estado == 'mesa' %}<span class="selo ok">No NewMPSC</span>
+              {% else %}<span class="selo">Só no SIG</span>{% endif %}
+            </span>
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+      {% if conta.sig %}
+      <form method="post" action="/processos/buscar">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn principal largo" type="submit">Buscar no SIG simulado</button>
+      </form>
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

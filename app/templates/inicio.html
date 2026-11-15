@@ -18,7 +18,7 @@
   {% endfor %}
 </section>
 
-<div class="grade">
+<div class="grade {{ 'mesa-vazia' if sig_direto and not total }}">
   <section class="cartao principal" aria-labelledby="t-fila">
     <div class="linha">
       <h2 id="t-fila">{{ 'Para fazer' if ver == 'a_fazer' else 'Concluídos' }}</h2>
@@ -41,7 +41,8 @@
             {% if p.reu_preso %}<span class="selo erro">Réu preso</span>{% endif %}
             {% if p.vista | lower == 'urgente' %}<span class="selo atencao">Urgente</span>{% endif %}
             {% if not p.dv_ok and not config.dados_ficticios %}<span class="selo atencao">Conferir número</span>{% endif %}
-            {% if p.tarefa and p.tarefa.estado == 'escrevendo' %}<span class="selo andamento">Escrevendo…</span>
+            {% if p.entrega %}<span class="selo atencao">Falta assinar no SIG</span>
+            {% elif p.tarefa and p.tarefa.estado == 'escrevendo' %}<span class="selo andamento">Escrevendo…</span>
             {% elif p.tarefa and p.tarefa.estado == 'falhou' %}<span class="selo erro">Relatório falhou</span>
             {% elif p.minuta and p.minuta.editada %}<span class="selo andamento">Em edição</span>
             {% elif p.minuta and p.minuta.motor == origem_ia %}<span class="selo ok">Relatório pronto</span>
@@ -58,7 +59,7 @@
     <div class="vazio">
       {% if ver == 'a_fazer' %}
       <p class="vazio-titulo">Sua mesa está limpa</p>
-      <p class="fraco">Traga a planilha exportada do SIG e cada processo chega aqui {{ 'pronto para receber os autos' if ia else 'com a primeira minuta pronta' }}.</p>
+      <p class="fraco">{{ 'Use Buscar no ' ~ sig_nome if sig_direto else 'Traga a planilha exportada do SIG' }} e cada processo chega aqui {{ 'pronto para receber os autos' if ia else 'com a primeira minuta pronta' }}.</p>
       {% else %}
       <p class="fraco">Nenhum processo concluído ainda.</p>
       {% endif %}
@@ -69,6 +70,15 @@
   <div class="lateral pilha-cartoes">
     <section class="cartao" aria-labelledby="t-trazer">
       <h2 id="t-trazer">Trazer processos</h2>
+      {% if sig_direto %}
+      <form method="post" action="/processos/buscar">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="btn principal largo" type="submit">Buscar no {{ sig_nome }}</button>
+      </form>
+      <p class="fraco pequeno">Traz a sua fila direto, sem exportar planilha.</p>
+      <details>
+        <summary>Usar a planilha exportada</summary>
+      {% endif %}
       <form method="post" action="/processos/importar" enctype="multipart/form-data" id="form-planilha">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <label class="soltar" id="soltar">
@@ -78,6 +88,7 @@
         </label>
         <noscript><button class="btn principal largo" type="submit">Enviar planilha</button></noscript>
       </form>
+      {% if sig_direto %}</details>{% endif %}
       <details>
         <summary>Colar números de processo</summary>
         <form method="post" action="/processos/colar" class="pilha">
