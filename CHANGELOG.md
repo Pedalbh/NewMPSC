@@ -12,13 +12,13 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em
 - Devolver o processo à fila retira o rascunho do SIG simulado; enviar de novo troca o rascunho. A tela avisa quando a minuta muda depois do envio.
 - O rascunho chega ao SIG simulado com a formatação da folha. A contagem dos trechos a completar aparece acima do botão de enviar e acompanha a digitação.
 - Se o SIG simulado não responde, a tela diz o que fazer e nada muda na mesa.
+- Plano do piloto em promotorias criminais (`docs/PILOTO.md`) e três cartões novos para o titular (C16, C17 e C18).
 
 ### Alterado
 - Os avisos de importação flexionam o número ("1 processo novo", "9 processos novos").
 
 ### Corrigido
 - A marca "[CONFERIR: citação]" não dispara mais em palavras como "resposta" e "respeito" (o padrão de "REsp" casava com o começo da palavra).
-- Plano do piloto em promotorias criminais (`docs/PILOTO.md`) e três cartões novos para o titular (C16, C17 e C18).
 
 ### Segurança
 - `NEWMPSC_DADOS_FICTICIOS` só aceita `0` ou `1`; qualquer outro valor impede a partida. Antes, `false` ou vazio passavam por "fictício" e soltavam as travas do motor de IA e do SIG simulado.

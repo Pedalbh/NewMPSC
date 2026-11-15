@@ -122,7 +122,7 @@ def test_rascunho_e_copia_e_a_tela_avisa_quando_a_minuta_muda_depois(logada, ban
     logada.enviar("/processos/buscar")
     logada.enviar("/processos/1/entregar")
     pagina = logada.get("/processos/1").text
-    assert "Trocar o rascunho no SIG simulado" in pagina and 'id="mudou"' not in pagina
+    assert "Trocar o rascunho no SIG" in pagina and 'id="mudou"' not in pagina
     logada.put("/api/processos/1/minuta", json={"blocos": [{"texto": "Versão nova.", "estilo": "corpo"}]},
                headers={"X-CSRF-Token": logada.csrf("/")})
     assert "Versão nova." not in banco.query(EntregaSig).one().texto   # o rascunho no SIG é o que foi enviado

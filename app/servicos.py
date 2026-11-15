@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from .autos import Leitura, impressao, limpar
 from .modelos import ArquivoAutos, Audiencia, EntregaSig, Minuta, PaginaAutos, PedidoIA, Processo, TarefaMinuta, Usuario
@@ -337,14 +338,15 @@ def entregar_ao_sig(db: Session, processo: Processo, usuario: Usuario, conexao: 
         raise ValueError("este servidor só aceita dados fictícios, e o número deste processo é real")
     blocos = [dict(b) for b in processo.minuta.blocos]   # cópia: o rascunho não muda se a minuta mudar depois
     recibo = conexao.entregar_rascunho(usuario.email, processo.numero, documento.texto_simples(blocos))
-    if processo.entrega:
-        db.delete(processo.entrega)
-        db.flush()
-    processo.entrega = EntregaSig(usuario_id=processo.usuario_id, recibo=recibo[:40], tipo=processo.minuta.tipo,
-                                  blocos=blocos, pendentes=trechos_pendentes(blocos), recebida_em=agora)
     try:
+        if processo.entrega:
+            db.delete(processo.entrega)
+            db.flush()
+        processo.entrega = EntregaSig(usuario_id=processo.usuario_id, recibo=recibo[:40],
+                                      tipo=processo.minuta.tipo, blocos=blocos,
+                                      pendentes=trechos_pendentes(blocos), recebida_em=agora)
         definir_situacao(db, processo, "concluido", agora)
-    except IntegrityError:   # o mesmo processo enviado duas vezes ao mesmo tempo (duas abas, clique duplo)
+    except (IntegrityError, StaleDataError):   # o mesmo processo enviado duas vezes ao mesmo tempo (duas abas)
         db.rollback()
         raise ValueError("este processo já estava sendo enviado; confira em Concluídos") from None
     return processo.entrega

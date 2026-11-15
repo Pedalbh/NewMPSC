@@ -151,7 +151,13 @@ class Conexao(Protocol):
         `busca_direta`. Assinar e protocolar continuam sendo do usuário, no SIG. Levanta `SigIndisponivel`.
 
         `quem` existe para a integração oficial agir com a identidade da própria pessoa, e não com uma conta de
-        serviço que enxergue várias promotorias: a fila é a dela e o rascunho fica em nome dela."""
+        serviço que enxergue várias promotorias: a fila é a dela e o rascunho fica em nome dela. Hoje é o e-mail;
+        na integração oficial passa a ser a credencial delegada da pessoa (um token dela), não um nome que uma
+        conta de serviço use para se passar por ela.
+
+        A aplicação chama este método antes de gravar o recibo. O adaptador oficial precisa aceitar a repetição
+        para o mesmo processo sem duplicar o rascunho (ou oferecer como desfazer): se a gravação do recibo falhar,
+        ou dois envios chegarem juntos, não pode sobrar rascunho órfão no SIG."""
 
 
 class ConexaoPlanilha:

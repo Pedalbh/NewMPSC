@@ -37,7 +37,7 @@ Só se passa de fase quando o portão é cumprido. Qualquer participante pode pe
 - **Portão 0:** autorização escrita para o piloto; hospedagem definida; parecer do encarregado sobre dado real na aplicação; relatório de impacto à proteção de dados, se o encarregado pedir; plano de resposta a incidente, com quem avisa quem e em que prazo. CONFERIR: LGPD, art. 4º, III, "d", e, se ele não afastar a lei, arts. 7º, 11 e 23; arts. 38 e 48 e a regulamentação da ANPD sobre incidentes; normas do CNMP e do MPSC sobre uso de IA; Resolução CNJ 615/2025, se e como se aplica ao Ministério Público.
 
 ### Fase 1 · Ensaio com dados fictícios (2 semanas; pode começar já)
-- Os participantes usam o protótipo de hoje: SIG simulado, autos fictícios, relatório por IA sobre os autos fictícios.
+- Os participantes usam o protótipo de hoje: SIG simulado e autos fictícios, com o motor de demonstração. O relatório por IA sobre os autos fictícios só entra no ensaio se o cartão do servidor de ensaio decidir que sim.
 - Uma hora de treinamento por promotoria e um roteiro de tarefas: buscar a fila, corrigir uma minuta, enviar, marcar audiência.
 - Não depende de contrato com fornecedor de IA nem de hospedagem institucional, porque nenhum dado real entra. Para isso valer na prática, e não só como promessa:
   - cada participante assina um termo curto: no ensaio, só dados fictícios;

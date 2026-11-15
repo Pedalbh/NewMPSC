@@ -2,6 +2,22 @@
 {% block titulo %}{{ p.numero }} · NewMPSC{% endblock %}
 {% block conteudo %}
 {% set de_ia = minuta.motor == origem_ia %}
+{# com o SIG direto, concluir e desfazer ficam junto do envio, à vista; sem ele, no cartão do processo #}
+{% set situacao_na_minuta = sig_direto and not escrevendo %}
+{% macro mudar_situacao() %}
+      <form method="post" action="/processos/{{ p.id }}/situacao">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        {% if p.situacao == 'a_fazer' %}
+        <input type="hidden" name="situacao" value="concluido">
+        <button class="btn largo" type="submit">{{ 'Concluir sem enviar ao SIG' if sig_direto else 'Marcar como concluído' }}</button>
+        {% else %}
+        <input type="hidden" name="situacao" value="a_fazer">
+        <button class="btn largo" type="submit">{{ 'Tirar do SIG e voltar à mesa' if p.entrega else 'Devolver à fila' }}</button>
+        {% endif %}
+      </form>
+      {% if sig_direto and p.situacao == 'a_fazer' %}<p class="fraco pequeno">Use se já resolveu este processo fora daqui.</p>
+      {% elif p.entrega %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a sua fila.</p>{% endif %}
+{% endmacro %}
 <nav class="trilha" aria-label="Você está em"><a class="elo" href="/">‹ Processos</a></nav>
 <section class="cabecalho-proc">
   <div>
@@ -62,14 +78,17 @@
       {% if sig_direto %}
       {% if p.entrega %}
       <p class="pequeno" id="no-sig">No {{ sig_nome }} como rascunho desde {{ p.entrega.recebida_em | data }} às {{ p.entrega.recebida_em | hora }} (recibo {{ p.entrega.recibo }}). Falta assinar e protocolar lá.</p>
-      {% if mudou %}<p class="aviso atencao pequeno" id="mudou">A minuta mudou depois do envio. O rascunho no SIG é o anterior.</p>{% endif %}
       {% endif %}
-      <p class="aviso atencao pequeno" id="trechos" role="status" {% if not pendentes %}hidden{% endif %}>{{ '1 trecho entre colchetes a completar' if pendentes == 1 else pendentes ~ ' trechos entre colchetes a completar' }}</p>
+      <div class="aviso atencao pequeno" id="antes-de-enviar" role="status" {% if not pendentes and not mudou %}hidden{% endif %}>
+        {% if mudou %}<p id="mudou">A minuta mudou depois do envio. O rascunho no SIG é o anterior.</p>{% endif %}
+        <p id="trechos" {% if not pendentes %}hidden{% endif %}>{{ '1 trecho entre colchetes a completar' if pendentes == 1 else pendentes ~ ' trechos entre colchetes a completar' }}</p>
+      </div>
       <form method="post" action="/processos/{{ p.id }}/entregar" id="form-entregar">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        <button class="btn {{ 'principal' if not em_branco and not pendentes and (mudou or not p.entrega) }} largo" type="submit" id="enviar-sig" {% if not em_branco and (mudou or not p.entrega) %}data-principal{% endif %}>{{ 'Trocar o rascunho no ' ~ sig_nome if p.entrega else 'Enviar ao ' ~ sig_nome }}</button>
+        <button class="btn {{ 'principal' if not em_branco and not pendentes and (mudou or not p.entrega) }} largo" type="submit" id="enviar-sig" {% if not em_branco and (mudou or not p.entrega) %}data-principal{% endif %}>{{ 'Trocar o rascunho no SIG' if p.entrega else 'Enviar ao ' ~ sig_nome }}</button>
       </form>
       <p class="fraco pequeno">{{ 'O rascunho que está lá é substituído por esta versão.' if p.entrega else 'Vai como rascunho, sem assinatura. Você assina e protocola no SIG.' }}</p>
+      {{ mudar_situacao() }}
       <details>
         <summary>Baixar ou copiar</summary>
         <div class="pilha">
@@ -182,18 +201,7 @@
         <div><dt>Prioridade</dt><dd>{{ grupos[p.grupo] }}</dd></div>
         <div><dt>Origem da minuta</dt><dd>{{ 'Relatório por IA, a conferir' if de_ia else 'Em branco' if minuta.motor == origem_em_branco else 'Demonstração' }}</dd></div>
       </dl>
-      <form method="post" action="/processos/{{ p.id }}/situacao">
-        <input type="hidden" name="csrf" value="{{ csrf }}">
-        {% if p.situacao == 'a_fazer' %}
-        <input type="hidden" name="situacao" value="concluido">
-        <button class="btn largo" type="submit">{{ 'Concluir sem enviar ao SIG' if sig_direto else 'Marcar como concluído' }}</button>
-        {% else %}
-        <input type="hidden" name="situacao" value="a_fazer">
-        <button class="btn largo" type="submit">{{ 'Tirar do SIG e voltar à mesa' if p.entrega else 'Devolver à fila' }}</button>
-        {% endif %}
-      </form>
-      {% if sig_direto and p.situacao == 'a_fazer' %}<p class="fraco pequeno">Use se já resolveu este processo fora daqui.</p>
-      {% elif p.entrega %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a sua fila.</p>{% endif %}
+      {% if not situacao_na_minuta %}{{ mudar_situacao() }}{% endif %}
       {% if not escrevendo %}
       <details>
         <summary>{{ 'Voltar à minuta em branco' if ia else 'Refazer a minuta do zero' }}</summary>

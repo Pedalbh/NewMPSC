@@ -333,6 +333,7 @@ def test_envelope_do_sig_simulado(endereco_sig, pagina):
     pg.locator("#folha").wait_for()
     enviar = pg.get_by_role("button", name="Enviar ao SIG simulado")
     sync_api.expect(enviar).to_be_in_viewport()
+    sync_api.expect(pg.get_by_role("button", name="Concluir sem enviar ao SIG")).to_be_in_viewport()
     # com trechos a completar, a contagem aparece e o envio não é a ação principal
     sync_api.expect(pg.locator("#trechos")).to_have_text("5 trechos entre colchetes a completar")
     assert "principal" not in enviar.get_attribute("class")
@@ -342,10 +343,11 @@ def test_envelope_do_sig_simulado(endereco_sig, pagina):
     pg.keyboard.press("End")
     pg.keyboard.type(" Frase do envelope.")
     # a contagem acompanha a digitação: completar um trecho baixa o número
-    fecho = pg.locator("#folha .b-centro")
-    fecho.click()
-    pg.keyboard.press("Control+a")
-    pg.keyboard.type("Cidade Fictícia, data da assinatura digital.")
+    pg.locator("#folha .b-centro").click()
+    pg.keyboard.press("Control+Home")   # início do fecho: "[COMARCA], data da assinatura digital."
+    for _ in range(len("[COMARCA]")):
+        pg.keyboard.press("Shift+ArrowRight")
+    pg.keyboard.type("Cidade Fictícia")
     sync_api.expect(pg.locator("#trechos")).to_have_text("4 trechos entre colchetes a completar")
     perguntas = []
     pg.once("dialog", lambda d: (perguntas.append(d.message), d.dismiss()))
@@ -373,8 +375,12 @@ def test_envelope_do_sig_simulado(endereco_sig, pagina):
     # o rascunho chega com a formatação da folha, e não é editável do lado do SIG
     assert rascunho.locator(".b-endereco").evaluate("e => getComputedStyle(e).fontWeight") == "700"
     assert rascunho.locator("[contenteditable]").count() == 0
+    assert pg.evaluate("CSS.highlights.get('marca').size") == 4   # os trechos a completar, destacados como na mesa
     foto(pg, "20-sig-outro-lado")
     pg.emulate_media(color_scheme="dark")
+    pg.wait_for_timeout(300)   # a troca de tema tem transição de cor
+    aba = pg.locator(".aba[aria-current]")
+    assert aba.evaluate("e => getComputedStyle(e).backgroundColor != getComputedStyle(e).color")
     foto(pg, "20b-sig-outro-lado-escuro")
     pg.emulate_media(color_scheme="light")
     pg.set_viewport_size({"width": 390, "height": 800})
@@ -385,12 +391,16 @@ def test_envelope_do_sig_simulado(endereco_sig, pagina):
     # na mesa, o processo concluído diz onde está; devolver à fila retira o rascunho
     pg.get_by_role("link", name="Abrir na mesa").click()
     sync_api.expect(pg.locator("#no-sig")).to_contain_text("Falta assinar e protocolar lá.")
-    troca = pg.get_by_role("button", name="Trocar o rascunho no SIG simulado")
+    troca = pg.get_by_role("button", name="Trocar o rascunho no SIG")
     sync_api.expect(troca).to_be_visible()
+    assert troca.evaluate("e => e.getBoundingClientRect().height") <= 46   # o texto cabe numa linha
     assert pg.locator("#mudou").count() == 0
+    # desfazer fica junto do envio, à vista, sem rolar a coluna lateral
+    sync_api.expect(pg.get_by_role("button", name="Tirar do SIG e voltar à mesa")).to_be_in_viewport()
     # mexer na minuta depois do envio avisa que o rascunho no SIG ficou para trás
     pg.locator("#folha .b-corpo").first.click()
-    pg.keyboard.type("Depois do envio. ")
+    pg.keyboard.press("Control+End")
+    pg.keyboard.type(" Depois do envio.")
     pg.locator("#estado-salvar", has_text="Salva às").wait_for()
     pg.reload()
     sync_api.expect(pg.locator("#mudou")).to_contain_text("A minuta mudou depois do envio.")
