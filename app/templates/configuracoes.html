@@ -9,10 +9,15 @@
     <label class="campo">Nome <input type="text" name="nome" value="{{ usuario.nome }}" required maxlength="120" autocomplete="name"></label>
     <label class="campo">Cargo <input type="text" name="cargo" value="{{ usuario.cargo }}" maxlength="120"></label>
     <label class="campo">E-mail de acesso <input type="email" value="{{ usuario.email }}" disabled></label>
-    <label class="campo">Promotoria <input type="text" value="{{ usuario.espaco.nome }}" disabled></label>
-    <label class="campo">Papel <input type="text" value="{{ 'Promotor' if usuario.papel == 'promotor' else 'Assessor' }}" disabled></label>
-    <p class="fraco pequeno">Quem é da mesma promotoria vê a mesma mesa. Só o promotor envia ao SIG. Promotoria e papel são mudados por quem administra.</p>
     <button class="btn principal" type="submit">Salvar</button>
   </form>
+</section>
+<section class="cartao" aria-labelledby="t-mesa">
+  <h2 id="t-mesa">Sua mesa</h2>
+  <dl class="dados">
+    <div><dt>Promotoria</dt><dd id="minha-promotoria">{{ usuario.espaco.nome }}</dd></div>
+    <div><dt>Papel</dt><dd id="meu-papel">{{ 'Envia ao SIG' if usuario.papel == 'promotor' else 'Prepara as minutas' }}</dd></div>
+  </dl>
+  <p class="fraco pequeno">Promotoria e papel só mudam por quem administra.</p>
 </section>
 {% endblock %}

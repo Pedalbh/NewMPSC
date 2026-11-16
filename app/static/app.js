@@ -110,9 +110,14 @@
           body: JSON.stringify({ blocos: blocos(), versao }),
         });
         const d = await r.json().catch(() => ({}));
-        if (r.ok) { versao = d.versao; marcar("Salva às " + d.salva_em, "ok"); }
-        else if (r.status === 409) {
+        if (r.ok) {
+          versao = d.versao; marcar("Salva às " + d.salva_em, "ok");
+          // refazer e escrever por cima conferem a mesma versão: os formulários acompanham
+          document.querySelectorAll('input[name="versao"]').forEach((campo) => { campo.value = versao; });
+        } else if (r.status === 409) {
+          // outra pessoa salvou antes: a folha trava (nada digitado daqui em diante se perderia calado)
           conflito = true; pendente = false; marcar("Não salvou", "erro");
+          folha.querySelectorAll(".b").forEach((p) => { p.contentEditable = "false"; });
           const aviso = document.getElementById("conflito");
           aviso.hidden = false; aviso.focus();
         } else marcar(d.erro || "Não salvou", "erro");
@@ -186,6 +191,17 @@
       formulario.dataset.pronto = "1"; formulario.submit();
     });
   }
+
+  const copiarConflito = document.getElementById("copiar-conflito");
+  copiarConflito?.addEventListener("click", async () => {
+    const original = copiarConflito.textContent;
+    try {
+      await navigator.clipboard.writeText(
+        [...folha.querySelectorAll(".b")].map((p) => p.innerText.trim()).filter(Boolean).join("\n\n"));
+      copiarConflito.textContent = "Copiado";
+    } catch { copiarConflito.textContent = "Não foi possível copiar"; }
+    setTimeout(() => { copiarConflito.textContent = original; }, 1800);
+  });
 
   const copiar = document.getElementById("copiar");
   copiar?.addEventListener("click", async () => {

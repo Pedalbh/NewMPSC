@@ -314,10 +314,11 @@ def test_servidor_ocupado_interrompe_o_envio_no_primeiro_arquivo(com_fila, vagas
     assert "Nada foi enviado: o servidor está lendo" in html
 
 
-def test_um_envio_em_leitura_por_usuario(com_fila, ana, banco):
-    with autos.vez_do_usuario(ana.id):
+def test_um_envio_em_leitura_por_promotoria(com_fila, ana, banco):
+    """Um de cada vez na promotoria: o teto de arquivos e a cota são conferidos sem corrida entre colegas."""
+    with autos.vez_do_usuario(f"promotoria {ana.promotoria_id}"):
         enviar_pdf(com_fila)
-    assert "Nada foi enviado: já há um envio seu em leitura" in com_fila.get("/processos/1").text
+    assert "Nada foi enviado: já há um envio da promotoria em leitura" in com_fila.get("/processos/1").text
     assert contar(banco, ArquivoAutos) == 0
     enviar_pdf(com_fila)   # terminada a leitura, a vez volta
     assert contar(banco, ArquivoAutos) == 1

@@ -82,14 +82,28 @@ def _dados(processo: Processo, com_autos: bool = False) -> DadosProcesso:
                          bool(processo.reu_preso), autos)
 
 
-def _criar_minuta(processo: Processo, motor: Motor) -> None:
+def _versao_seguinte(processo: Processo) -> int:
+    """A minuta que substitui outra continua a contagem dela. Se voltasse a zero, uma tela aberta na minuta
+    antiga salvaria por cima da nova sem aviso (achado na revisão do C18)."""
+    return (processo.minuta.versao or 0) + 1 if processo.minuta else 0
+
+
+def _criar_minuta(processo: Processo, motor: Motor, versao: int = 0) -> None:
     """Primeira minuta do processo. O motor que precisa dos autos não é chamado aqui: fica a estrutura da peça,
     e o usuário pede a escrita depois de enviar os autos."""
     if motor.usa_autos:
         m, nome = esqueleto(_dados(processo)), ORIGEM_EM_BRANCO
     else:
         m, nome = motor.elaborar_minuta(_dados(processo)), motor.nome
-    processo.minuta = Minuta(tipo=m["tipo"], blocos=documento.folha(m), motor=nome)
+    processo.minuta = Minuta(tipo=m["tipo"], blocos=documento.folha(m), motor=nome, versao=versao)
+
+
+def conferir_versao(processo: Processo, versao: int | None) -> None:
+    """Antes de apagar a minuta (refazer, escrever por cima): a tela de quem pede precisa ser a atual."""
+    if versao is None:
+        raise MinutaMudou("recarregue a página antes de trocar a minuta")
+    if processo.minuta and (processo.minuta.versao or 0) != versao:
+        raise MinutaMudou("outra pessoa alterou esta minuta; recarregue a página para ver a versão dela")
 
 
 class EscritaRecusada(ValueError):
@@ -104,11 +118,34 @@ class MinutaMudou(ValueError):
     """Outra pessoa salvou a minuta depois que esta tela a carregou."""
 
 
-def registrar_acesso(db: Session, usuario: Usuario, acao: str, processo: Processo | None = None) -> None:
-    """Uma linha no registro de acessos: quem, o quê, em qual processo, quando. Sem conteúdo."""
-    db.add(Acesso(usuario_id=usuario.id, promotoria_id=usuario.promotoria_id, acao=acao[:30],
+EDICAO_NOVA = timedelta(minutes=30)   # a mesma pessoa voltando a editar depois disso ganha linha nova no registro
+
+
+def registrar_acesso(db: Session, usuario: Usuario, acao: str, processo: Processo | None = None,
+                     promotoria_id: int | None = None) -> None:
+    """Uma linha no registro de acessos: quem, o quê, em qual processo, quando. Sem conteúdo. `promotoria_id` só
+    é informado nos atos de administração, quando a pessoa ainda não está (ou já não está) na promotoria."""
+    onde = promotoria_id if promotoria_id is not None else usuario.promotoria_id
+    if onde is None:
+        return
+    db.add(Acesso(usuario_id=usuario.id, promotoria_id=onde, acao=acao[:60],
                   processo_id=processo.id if processo is not None else None))
     db.commit()
+
+
+def edicao_a_registrar(processo: Processo, usuario: Usuario, agora: datetime) -> bool:
+    """O registro não ganha uma linha a cada tecla: ganha quando muda quem edita ou a pessoa volta depois."""
+    minuta = processo.minuta
+    return minuta.editada_por != usuario.id or agora - minuta.atualizada_em > EDICAO_NOVA
+
+
+def versao_da_tela(valor) -> int | None:
+    """A versão da minuta que a tela mandou, se for um inteiro plausível; texto, fração ou booleano não valem."""
+    if isinstance(valor, str) and valor.isdigit() and len(valor) < 10:
+        valor = int(valor)
+    if isinstance(valor, bool) or not isinstance(valor, int) or not 0 <= valor < 2**31:
+        return None
+    return valor
 
 
 def acessos_da_promotoria(db: Session, promotoria_id: int, limite: int = 200) -> list[Acesso]:
@@ -134,7 +171,7 @@ def conferir_escrita(db: Session, processo: Processo) -> None:
 
 
 def pedir_escrita(db: Session, processo: Processo, usuario: Usuario, motor: Motor, ficticio: bool,
-                  confirmado: bool = False) -> TarefaMinuta:
+                  confirmado: bool = False, versao: int | None = None) -> TarefaMinuta:
     """Marca que a minuta deste processo está sendo escrita pelo motor e registra o pedido em nome de quem pediu.
     Os limites são por pessoa. Levanta `EscritaRecusada` com a orientação."""
     if processo.promotoria_id != usuario.promotoria_id:   # a rota já filtra; aqui é a segunda barreira
@@ -149,7 +186,12 @@ def pedir_escrita(db: Session, processo: Processo, usuario: Usuario, motor: Moto
     if not any(p.texto for a in processo.autos for p in a.paginas):
         raise EscritaRecusada("envie antes os autos em PDF, com texto para ler")
     if processo.minuta and processo.minuta.editada and not confirmado:
-        raise EscritaRecusada("confirme que as suas alterações na minuta podem ser apagadas")
+        raise EscritaRecusada("confirme que as alterações feitas na minuta podem ser apagadas")
+    if processo.minuta and processo.minuta.editada:
+        try:   # o relatório vai apagar o que foi escrito: a tela de quem confirma precisa ser a atual
+            conferir_versao(processo, versao)
+        except MinutaMudou as e:
+            raise EscritaRecusada(str(e)) from None
     agora = datetime.now()
     with _tranca_escrita:
         for tarefa in db.scalars(select(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo",
@@ -230,10 +272,11 @@ def _fechar_escrita(db: Session, processo_id: int, chave: str, estado: str, erro
         return   # a escrita venceu ou foi trocada por outra: este resultado não entra
     tarefa = processo.tarefa
     if estado == "pronta":
+        versao = _versao_seguinte(processo)
         if processo.minuta:
             db.delete(processo.minuta)
             db.flush()
-        processo.minuta = Minuta(tipo=m["tipo"], blocos=blocos, motor=ORIGEM_IA)
+        processo.minuta = Minuta(tipo=m["tipo"], blocos=blocos, motor=ORIGEM_IA, versao=versao)
         tarefa.pontos = [str(p) for p in m.get("pontos") or []]
     tarefa.estado, tarefa.erro, tarefa.vista, tarefa.repetir = estado, erro, False, repetir
     for pedido in db.scalars(select(PedidoIA).where(PedidoIA.chave == chave, PedidoIA.resultado == "em curso")):
@@ -303,7 +346,15 @@ def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, fic
         if ficticio and "dígito verificador" in c["motivo"]:
             continue
         res.conferir.append(f"linha {c['linha']}: {c['motivo']}")
-    db.commit()
+    return _gravar_fila(db, res)
+
+
+def _gravar_fila(db: Session, res: ResultadoImportacao) -> ResultadoImportacao:
+    try:
+        db.commit()
+    except IntegrityError:   # duas pessoas da promotoria trazendo a mesma fila ao mesmo tempo
+        db.rollback()
+        return ResultadoImportacao(conferir=["outra pessoa trouxe a fila ao mesmo tempo; nada mudou, tente de novo"])
     return res
 
 
@@ -328,14 +379,15 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor,
         _criar_minuta(p, motor)
         db.add(p)
         res.novos += 1
-    db.commit()
-    return res
+    return _gravar_fila(db, res)
 
 
 def apagar_processo(db: Session, usuario: Usuario, numero: str) -> bool:
     """Apaga um processo da promotoria do usuário e tudo o que é dele: minuta, autos, rascunho enviado, escrita,
     registro de pedidos à IA e audiências com o mesmo número. Para dado que entrou por engano; só pela linha de
     comando. O registro de acessos fica: não tem conteúdo, e diz quem mexeu no que foi apagado."""
+    if usuario.promotoria_id is None:   # conta desligada não alcança nada, nem linha órfã de banco antigo
+        return False
     processo = db.scalar(select(Processo).where(Processo.promotoria_id == usuario.promotoria_id,
                                                 Processo.numero == numero))
     audiencias = db.scalars(select(Audiencia).where(Audiencia.promotoria_id == usuario.promotoria_id,
@@ -363,42 +415,42 @@ def processo_da_mesa(db: Session, usuario: Usuario, processo_id: int) -> Process
                                             Processo.promotoria_id == usuario.promotoria_id))
 
 
-def salvar_minuta(db: Session, processo: Processo, blocos, usuario: Usuario | None = None,
-                  versao: int | None = None) -> Minuta:
-    """Grava a folha. Com `versao` (a que a tela carregou), a gravação só acontece se ninguém salvou depois:
-    duas pessoas na mesma minuta não se apagam em silêncio. Levanta `MinutaMudou` nesse caso."""
+def salvar_minuta(db: Session, processo: Processo, blocos, usuario: Usuario, versao: int | None) -> Minuta:
+    """Grava a folha, se `versao` (a que a tela carregou) ainda é a atual: duas pessoas na mesma minuta não se
+    apagam em silêncio. Sem versão não grava. Levanta `MinutaMudou` com a orientação."""
     if escrevendo(processo):
         raise ValueError("a minuta está sendo escrita; espere terminar")
+    if versao is None:
+        raise MinutaMudou("recarregue a página antes de continuar a escrever")
     minuta, blocos = processo.minuta, documento.normalizar(blocos)
-    if versao is not None:
-        # a conferência e o avanço da versão num comando só: de dois salvamentos juntos, um perde e é avisado
-        mudou = db.execute(update(Minuta).where(Minuta.id == minuta.id, Minuta.versao == versao)
-                           .values(versao=versao + 1)).rowcount
-        if not mudou:
-            db.rollback()
-            raise MinutaMudou("outra pessoa alterou esta minuta; recarregue a página para ver a versão dela")
-        db.refresh(minuta)
-    else:
-        minuta.versao = (minuta.versao or 0) + 1
+    # a conferência e o avanço da versão num comando só: de dois salvamentos juntos, um perde e é avisado
+    mudou = db.execute(update(Minuta).where(Minuta.id == minuta.id, Minuta.versao == versao)
+                       .values(versao=versao + 1)).rowcount
+    if not mudou:
+        db.rollback()
+        raise MinutaMudou("outra pessoa alterou esta minuta; recarregue a página para ver a versão dela")
+    db.refresh(minuta)
     minuta.blocos = blocos
     if processo.tarefa and processo.tarefa.estado == "falhou":
         db.delete(processo.tarefa)   # a pessoa seguiu à mão: o aviso da falha não fica para sempre
     minuta.editada = True
     minuta.atualizada_em = datetime.now()
-    minuta.editada_por = usuario.id if usuario is not None else None
+    minuta.editada_por = usuario.id
     db.commit()
     return minuta
 
 
-def refazer_minuta(db: Session, processo: Processo, motor: Motor) -> None:
+def refazer_minuta(db: Session, processo: Processo, motor: Motor, versao: int | None) -> None:
     if escrevendo(processo):
         raise ValueError("a minuta está sendo escrita; espere terminar")
+    conferir_versao(processo, versao)
+    seguinte = _versao_seguinte(processo)
     if processo.tarefa:
         db.delete(processo.tarefa)
     if processo.minuta:
         db.delete(processo.minuta)
         db.flush()
-    _criar_minuta(processo, motor)
+    _criar_minuta(processo, motor, seguinte)
     db.commit()
 
 

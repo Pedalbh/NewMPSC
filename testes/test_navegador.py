@@ -299,7 +299,7 @@ def test_relatorio_escrito_pelo_motor_de_ia(endereco_ia, pagina):
     recolhido = pg.locator("summary", has_text="Escrever o relatório de novo")
     assert recolhido.evaluate("e => getComputedStyle(e).display") == "list-item"   # com o triângulo de abrir
     recolhido.click()
-    sync_api.expect(pg.get_by_role("button", name="Apagar minhas alterações e escrever")).to_be_visible()
+    sync_api.expect(pg.get_by_role("button", name="Apagar as alterações e escrever")).to_be_visible()
 
     # a mesa mostra o estado do relatório
     pg.get_by_role("link", name="‹ Processos").click()
@@ -448,6 +448,7 @@ def test_espaco_da_promotoria(endereco_promotoria, pagina):
     de_ana.set_viewport_size({"width": 1360, "height": 900})
     de_ana.context.clear_cookies()
     contexto = de_ana.context.browser.new_context(viewport={"width": 1360, "height": 900}, locale="pt-BR")
+    contexto.grant_permissions(["clipboard-read", "clipboard-write"])
     de_caio = contexto.new_page()
     erros = []
     de_caio.on("pageerror", lambda e: erros.append(str(e)))
@@ -465,15 +466,25 @@ def test_espaco_da_promotoria(endereco_promotoria, pagina):
     # ele não envia: a tela diz por quê, e o que ele pode fazer continua à vista
     sync_api.expect(de_caio.locator("#so-promotor")).to_be_visible()
     assert de_caio.locator("#form-entregar").count() == 0
-    sync_api.expect(de_caio.get_by_role("button", name="Concluir sem enviar ao SIG")).to_be_in_viewport()
+    # concluir tiraria o processo da mesa da promotora: para ele fica recolhido, não é o botão da tela
+    sync_api.expect(de_caio.get_by_role("button", name="Concluir sem enviar ao SIG")).to_be_hidden()
+    sync_api.expect(de_caio.locator("#concluir-assessor summary")).to_be_visible()
     foto(de_caio, "21-promotoria-assessor")
+    de_caio.set_viewport_size({"width": 390, "height": 800})
+    assert de_caio.evaluate("document.documentElement.scrollWidth") <= 390
+    foto(de_caio, "21b-promotoria-assessor-celular")
+    de_caio.set_viewport_size({"width": 1360, "height": 900})
 
     # a promotora vê a mesma mesa, com o texto dele e quem mexeu por último
     _entrar(de_ana, endereco_promotoria, "ana@exemplo.invalid")
     assert de_ana.locator(".fila .proc").count() == 9
+    # na fila ela já vê qual minuta o assessor preparou, sem abrir uma por uma
+    sync_api.expect(de_ana.locator(".fila .proc").first).to_contain_text("Editada por Caio")
+    assert de_ana.get_by_text("Editada por Caio").count() == 1
+    foto(de_ana, "22a-promotoria-fila-da-promotora")
     de_ana.locator(".fila .proc").first.click()
     sync_api.expect(de_ana.locator("#folha")).to_contain_text("Preparado pelo assessor.")
-    sync_api.expect(de_ana.locator("#quem-editou")).to_contain_text("Última alteração: Caio Exemplo")
+    sync_api.expect(de_ana.locator("#quem-editou")).to_contain_text("Alterada por Caio Exemplo hoje às")
     foto(de_ana, "22-promotoria-promotora-confere")
 
     # os dois com a mesma minuta aberta: ela salva primeiro; o que ele digita depois não apaga o dela
@@ -486,8 +497,24 @@ def test_espaco_da_promotoria(endereco_promotoria, pagina):
     sync_api.expect(de_caio.locator("#conflito")).to_be_visible()
     sync_api.expect(de_caio.locator("#conflito")).to_be_focused()
     sync_api.expect(de_caio.locator("#estado-salvar")).to_have_text("Não salvou")
+    # a folha trava: nada digitado daqui em diante se perde calado; o texto dele sai pelo botão de copiar
+    assert de_caio.locator("#folha .b[contenteditable=true]").count() == 0
+    de_caio.get_by_role("button", name="Copiar o que escrevi").click()
+    sync_api.expect(de_caio.get_by_role("button", name="Copiado")).to_be_visible()
+    assert "Por cima." in de_caio.evaluate("navigator.clipboard.readText()")
+    nova = de_caio.get_by_role("link", name="Carregar a versão nova")
+    assert nova.evaluate("e => e.getBoundingClientRect().height") >= 44
     foto(de_caio, "23-promotoria-conflito")
-    de_caio.locator("#conflito a").click()
+    de_caio.set_viewport_size({"width": 390, "height": 800})
+    sync_api.expect(nova).to_be_in_viewport()
+    assert de_caio.evaluate("document.documentElement.scrollWidth") <= 390
+    foto(de_caio, "23b-promotoria-conflito-celular")
+    de_caio.set_viewport_size({"width": 1360, "height": 900})
+    de_caio.emulate_media(color_scheme="dark")
+    de_caio.wait_for_timeout(300)   # a troca de tema tem transição de cor
+    foto(de_caio, "23c-promotoria-conflito-escuro")
+    de_caio.emulate_media(color_scheme="light")
+    nova.click()
     sync_api.expect(de_caio.locator("#folha")).to_contain_text("Conferido pela promotora.")
     sync_api.expect(de_caio.locator("#folha")).not_to_contain_text("Por cima.")
     sync_api.expect(de_caio.locator("#conflito")).to_be_hidden()
@@ -501,7 +528,8 @@ def test_espaco_da_promotoria(endereco_promotoria, pagina):
     assert de_caio.get_by_role("button", name="Tirar do SIG e voltar à mesa").count() == 0
     foto(de_caio, "24-promotoria-assessor-depois-do-envio")
     de_caio.goto(endereco_promotoria + "/configuracoes")
-    sync_api.expect(de_caio.get_by_label("Papel")).to_have_value("Assessor")
+    sync_api.expect(de_caio.locator("#meu-papel")).to_have_text("Prepara as minutas")
+    sync_api.expect(de_caio.locator("#minha-promotoria")).to_have_text(PROMOTORIA)
     foto(de_caio, "25-promotoria-seus-dados")
     assert not erros and not de_ana.erros
     contexto.close()

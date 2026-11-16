@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from app import cli, servicos
-from app.cli import criar_usuario, desligar_usuario, mover_usuario
+from app.cli import criar_promotoria, criar_usuario, desligar_usuario, mover_usuario
 from app.config import Config
 from app.main import criar_app
 from app.modelos import Acesso, EntregaSig, Minuta, PedidoIA, Processo, Promotoria, Usuario, criar_banco
@@ -60,7 +60,9 @@ def test_a_mesma_promotoria_ve_a_mesma_mesa(entrar):
     assert len(numeros_na_ordem(ana.get("/").text)) == 9 and PJ in ana.get("/").text
     assert salvar(caio).status_code == 200
     html = ana.get("/processos/1").text
-    assert "Texto do assessor." in html and "Última alteração: Caio Exemplo" in html
+    assert "Texto do assessor." in html and "Alterada por Caio Exemplo hoje às" in html
+    # na fila, a promotora vê o que o assessor já preparou sem abrir processo por processo
+    assert ana.get("/").text.count("Editada por Caio") == 1 and "Editada por" not in caio.get("/").text
     ana.enviar("/audiencias", {"numero": NUMERO, "data": "2026-11-16", "hora": "14:30",
                                "tipo": "Instrução e julgamento"}, pagina="/audiencias")
     assert NUMERO in caio.get("/audiencias").text and caio.get("/audiencias/1").status_code == 200
@@ -106,8 +108,9 @@ def test_so_o_promotor_envia_ao_sig_e_tira_de_la(entrar, banco):
     ana, caio = entrar("ana"), entrar("caio")
     caio.enviar("/processos/buscar")
     html = caio.get("/processos/1").text
-    assert "Só o promotor envia ao SIG" in html and 'id="form-entregar"' not in html
-    assert "Concluir sem enviar ao SIG" in html   # concluir sem tocar o SIG o assessor pode
+    assert "Quem envia ao SIG é o promotor" in html and 'id="form-entregar"' not in html
+    # concluir sem tocar o SIG o assessor pode, mas recolhido: não é o botão da tela dele
+    assert 'id="concluir-assessor"' in html and 'id="concluir-assessor"' not in ana.get("/processos/1").text
     r = caio.enviar("/processos/1/entregar")
     assert r.status_code == 403 and "Só o promotor envia ao SIG" in r.text
     assert banco.query(EntregaSig).count() == 0
@@ -118,7 +121,9 @@ def test_so_o_promotor_envia_ao_sig_e_tira_de_la(entrar, banco):
     # o rascunho aparece para a promotoria inteira; tirar do SIG é só do promotor
     assert entrega.recibo in caio.get("/sig-simulado").text
     html = caio.get("/processos/1").text
-    assert "Só o promotor tira o rascunho do SIG" in html and "Tirar do SIG e voltar à mesa" not in html
+    assert "Só o promotor troca ou tira o rascunho do SIG" in html and "Tirar do SIG e voltar à mesa" not in html
+    assert "Os autos só voltam a aceitar arquivo se o promotor tirar o rascunho" in html
+    assert html.count('action="/processos/1/situacao"') == 0   # sem botão, não sobra formulário vazio
     r = caio.enviar("/processos/1/situacao", {"situacao": "a_fazer"})
     assert r.status_code == 403 and banco.query(EntregaSig).count() == 1
     assert ana.enviar("/processos/1/situacao", {"situacao": "a_fazer"}).status_code == 303
@@ -140,7 +145,42 @@ def test_quem_salva_sobre_versao_antiga_e_avisado_e_nao_apaga_a_do_outro(entrar,
     assert banco.query(Minuta).filter_by(processo_id=1).one().blocos[0]["texto"] == "Texto do assessor."
     assert 'data-versao="1"' in ana.get("/processos/1").text
     assert salvar(ana, [{"texto": "Texto da promotora.", "estilo": "corpo"}], versao=1).json()["versao"] == 2
-    assert salvar(ana, versao=True).status_code == 200   # valor que não é número não vale como versão
+
+
+@pytest.mark.parametrize("versao", [None, "2", 2.0, True, [2], -1, 10**30])
+def test_sem_a_versao_certa_nada_e_gravado(entrar, banco, versao):
+    """Achado nos pareceres: versão ausente ou de outro tipo gravava por cima sem conferência; grande demais, 500."""
+    ana, caio = entrar("ana"), entrar("caio")
+    ana.enviar("/processos/buscar")
+    salvar(ana, [{"texto": "Texto da promotora.", "estilo": "corpo"}], versao=0)
+    salvar(ana, [{"texto": "Texto da promotora.", "estilo": "corpo"}], versao=1)
+    corpo = {"blocos": BLOCO, "versao": versao}
+    if versao is None:
+        del corpo["versao"]
+    # pelo cliente cru: o de teste acrescentaria a versão certa, como a tela faz
+    r = super(Cliente, caio).put("/api/processos/1/minuta", json=corpo, headers={"X-CSRF-Token": caio.csrf("/")})
+    assert r.status_code == 409 and "ecarregue a página" in r.json()["erro"]
+    banco.expire_all()
+    assert banco.query(Minuta).filter_by(processo_id=1).one().blocos[0]["texto"] == "Texto da promotora."
+
+
+def test_minuta_refeita_nao_volta_a_versao_zero_e_tela_antiga_nao_refaz(entrar, banco):
+    """Achado nos pareceres: a minuta nova nascia na versão 0, e uma aba antiga salvava por cima dela sem aviso."""
+    ana, caio = entrar("ana"), entrar("caio")
+    ana.enviar("/processos/buscar")
+    assert salvar(caio, versao=0).json()["versao"] == 1          # a aba de Caio fica na versão 1
+    assert ana.enviar("/processos/1/refazer").status_code == 303   # Ana refaz com a tela em dia
+    banco.expire_all()
+    assert banco.query(Minuta).filter_by(processo_id=1).one().versao == 2
+    assert salvar(ana, [{"texto": "Texto novo da Ana.", "estilo": "corpo"}], versao=2).json()["versao"] == 3
+    for antiga in (0, 1, 2):
+        assert salvar(caio, versao=antiga).status_code == 409
+    # refazer com a tela antiga, ou sem versão, também não apaga o texto novo
+    assert caio.enviar("/processos/1/refazer", {"versao": 1}).status_code == 409
+    r = caio.post("/processos/1/refazer", data={"csrf": caio.csrf("/")}, follow_redirects=False)
+    assert r.status_code == 409
+    banco.expire_all()
+    assert banco.query(Minuta).filter_by(processo_id=1).one().blocos[0]["texto"] == "Texto novo da Ana."
 
 
 def test_quem_sai_perde_o_acesso_na_hora_e_o_trabalho_fica(entrar, banco, pessoas):
@@ -173,24 +213,88 @@ def test_conta_sem_promotoria_informada_ganha_mesa_propria(banco):
     assert um.promotoria_id and dois.promotoria_id and um.promotoria_id != dois.promotoria_id
 
 
-def test_registro_de_acessos_diz_quem_fez_o_que(entrar, banco, pessoas, capsys, monkeypatch):
+def test_registro_de_acessos_diz_quem_fez_o_que(entrar, banco, pessoas, monkeypatch):
     ana, caio = entrar("ana"), entrar("caio")
     caio.enviar("/processos/buscar")
     caio.get("/processos/1")
-    salvar(caio)
-    salvar(caio)   # a segunda gravação seguida da mesma pessoa não repete a linha
+    salvar(caio, versao=0)
+    salvar(caio, versao=1)   # a segunda gravação seguida da mesma pessoa não repete a linha
     ana.get("/processos/1")
     ana.get("/processos/1/minuta.docx")
+    caio.enviar("/processos/1/entregar")   # tentativa negada também fica
     ana.enviar("/processos/1/entregar")
+    caio.enviar("/processos/1/situacao", {"situacao": "a_fazer"})
     ana.enviar("/processos/1/situacao", {"situacao": "a_fazer"})
-    linhas = [(a.usuario_id, a.acao) for a in banco.query(Acesso).order_by(Acesso.id)]
+    ana.enviar("/audiencias", {"numero": NUMERO, "data": "2026-11-16", "hora": "14:30",
+                               "tipo": "Instrução e julgamento"}, pagina="/audiencias")
+    ana.get("/audiencias/1")
+    ana.enviar("/sair")
     c, a = pessoas["caio"].id, pessoas["ana"].id
-    assert linhas == [(c, "abriu"), (c, "editou a minuta"), (a, "abriu"), (a, "baixou a minuta"),
-                      (a, "enviou ao SIG"), (a, "tirou do SIG")]
-    assert all(x.promotoria_id == pessoas["ana"].promotoria_id and x.processo_id == 1 for x in banco.query(Acesso))
-    assert len(servicos.acessos_da_promotoria(banco, pessoas["bruno"].promotoria_id)) == 0
+    da_mesa = banco.query(Acesso).filter_by(promotoria_id=pessoas["ana"].promotoria_id).order_by(Acesso.id)
+    linhas = [(x.usuario_id, x.acao) for x in da_mesa if not x.acao.startswith("administração")]
+    assert linhas == [
+        (a, "entrou"), (c, "entrou"), (c, "trouxe processos"), (c, "abriu"), (c, "editou a minuta"),
+        (a, "abriu"), (a, "baixou a minuta"), (c, "negado: enviar ao SIG"), (a, "enviou ao SIG"),
+        (c, "negado: tirar do SIG"), (a, "tirou do SIG"), (a, "marcou audiência"),
+        (a, "abriu ficha de audiência"), (a, "saiu")]
+    # quem volta a editar mais tarde ganha linha nova, mesmo sem ninguém no meio
+    minuta = banco.query(Minuta).filter_by(processo_id=1).one()
+    minuta.atualizada_em -= servicos.EDICAO_NOVA * 2
+    banco.commit()
+    salvar(caio, versao=caio.versao(1))
+    assert [x.acao for x in banco.query(Acesso).filter_by(usuario_id=c)].count("editou a minuta") == 2
+    # a tentativa de quem é de fora fica no registro da promotoria de quem tentou, sem o id do processo alheio
+    bruno = entrar("bruno")
+    assert bruno.get("/processos/1").status_code == 404 and bruno.get("/audiencias/1").status_code == 404
+    assert bruno.get("/processos/999").status_code == 404   # o que não existe não é tentativa
+    de_fora = [(x.acao, x.processo_id) for x in servicos.acessos_da_promotoria(banco, pessoas["bruno"].promotoria_id)
+               if x.acao.startswith("negado")]
+    assert sorted(de_fora) == [("negado: audiência de fora", None), ("negado: processo de fora", None)]
     # nenhuma rota mostra, altera ou apaga o registro
-    assert not [r.path for r in ana.app.routes if "acesso" in getattr(r, "path", "")]
+    assert not [r.path for r in bruno.app.routes if "acesso" in getattr(r, "path", "")]
+
+
+def test_atos_de_administracao_ficam_no_registro(banco, pessoas):
+    caio, pj, outra = pessoas["caio"], pessoas["ana"].promotoria_id, pessoas["bruno"].promotoria_id
+    mover_usuario(banco, caio.email, OUTRA, "promotor")
+    desligar_usuario(banco, caio.email)
+    desligar_usuario(banco, caio.email)   # de novo: nada a registrar
+    atos = [(x.promotoria_id, x.acao) for x in banco.query(Acesso).filter_by(usuario_id=caio.id).order_by(Acesso.id)]
+    assert atos == [(pj, "administração: entrou como assessor"), (pj, "administração: saiu (movido)"),
+                    (outra, "administração: entrou como promotor"), (outra, "administração: desligado")]
+
+
+def test_o_registro_so_acrescenta_mesmo_para_quem_escreve_no_banco(entrar, banco):
+    ana = entrar("ana")
+    ana.enviar("/processos/buscar")
+    total = banco.query(Acesso).count()
+    for comando in ("UPDATE acessos SET acao = 'x'", "DELETE FROM acessos"):
+        with pytest.raises(Exception, match="só acrescenta"):
+            banco.execute(text(comando))
+        banco.rollback()
+    assert banco.query(Acesso).count() == total and banco.query(Acesso).filter_by(acao="x").count() == 0
+
+
+def test_id_de_processo_apagado_nao_e_reaproveitado(banco, pessoas):
+    """Achado no parecer de segurança: o registro de acessos passava a apontar para o processo de outra promotoria."""
+    motor = type("M", (), {"usa_autos": True, "nome": "ia"})()
+    servicos.colar_numeros(banco, pessoas["ana"], NUMERO, motor, True)
+    antigo = banco.query(Processo).one().id
+    servicos.registrar_acesso(banco, pessoas["ana"], "abriu", banco.get(Processo, antigo))
+    assert servicos.apagar_processo(banco, pessoas["ana"], NUMERO)
+    servicos.colar_numeros(banco, pessoas["bruno"], NUMERO, motor, True)
+    assert banco.query(Processo).one().id != antigo
+    # conta desligada não apaga nada, nem linha sem promotoria de banco antigo
+    desligar_usuario(banco, "bruno@exemplo.invalid")
+    assert not servicos.apagar_processo(banco, pessoas["bruno"], NUMERO)
+
+
+def test_duas_pessoas_trazendo_a_mesma_fila_ao_mesmo_tempo_nao_viram_erro(banco, pessoas, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
+    motor = type("M", (), {"usa_autos": True, "nome": "ia"})()
+    monkeypatch.setattr(banco, "commit", lambda: (_ for _ in ()).throw(IntegrityError("x", {}, Exception())))
+    res = servicos.colar_numeros(banco, pessoas["ana"], NUMERO, motor, True)
+    assert res.novos == 0 and "ao mesmo tempo" in res.conferir[0]
 
 
 def test_o_pedido_a_ia_fica_em_nome_de_quem_pediu(banco, pessoas):
@@ -262,12 +366,16 @@ def test_banco_de_antes_do_espaco_passa_cada_conta_para_a_sua_promotoria(tmp_pat
         assert [p.id for p in servicos.fila(db, bruno)] == [1]
         motor = type("M", (), {"usa_autos": True, "nome": "ia"})()
         # a regra antiga (único por conta) saiu: Bruno traz para a promotoria nova um número que já trouxe na antiga
+        criar_promotoria(db, "Terceira")
         mover_usuario(db, "bruno@exemplo.invalid", "Terceira")
         assert servicos.colar_numeros(db, bruno, NUMERO, motor, True).novos == 1
     criar_banco(url, b"k" * 32)   # de novo: nada a converter
     with create_engine(url).connect() as c:
         ddl = c.execute(text("SELECT sql FROM sqlite_master WHERE name = 'processos'")).scalar()
         assert "UNIQUE (promotoria_id, numero)" in ddl and "UNIQUE (usuario_id, numero)" not in ddl
+        for tabela in ("processos", "audiencias"):   # o id deixa de ser reaproveitado também no banco antigo
+            assert "AUTOINCREMENT" in c.execute(text("SELECT sql FROM sqlite_master WHERE name = :t"),
+                                                {"t": tabela}).scalar()
         indice = "SELECT count(*) FROM sqlite_master WHERE name = 'ix_processos_usuario_id'"
         assert c.execute(text(indice)).scalar() == 1
 
@@ -276,14 +384,22 @@ def test_linha_de_comando_cria_move_desliga_e_lista(tmp_path, monkeypatch, capsy
     monkeypatch.setenv("NEWMPSC_BANCO", f"sqlite:///{tmp_path / 'cli.db'}")
     monkeypatch.setenv("NEWMPSC_SEGREDO", "s" * 40)
     monkeypatch.setattr(cli.getpass, "getpass", lambda _: SENHA)
+    with pytest.raises(SystemExit, match="não há promotoria"):   # nome errado não cria promotoria em silêncio
+        cli.main(["criar-usuario", "ana@exemplo.invalid", "Ana Exemplo", PJ])
+    cli.main(["criar-promotoria", PJ])
+    cli.main(["criar-promotoria", OUTRA])
+    with pytest.raises(SystemExit, match="já existe"):
+        cli.main(["criar-promotoria", PJ])
     cli.main(["criar-usuario", "ana@exemplo.invalid", "Ana Exemplo", PJ])
     cli.main(["criar-usuario", "caio@exemplo.invalid", "Caio Exemplo", PJ, "assessor"])
-    assert "como assessor" in capsys.readouterr().out
+    saida = capsys.readouterr().out
+    assert "como assessor" in saida and "ana@exemplo.invalid (promotor), caio@exemplo.invalid (assessor)" in saida
     with pytest.raises(SystemExit):
         cli.main(["criar-usuario", "eva@exemplo.invalid", "Eva", PJ, "chefe"])
     cli.main(["mover-usuario", "caio@exemplo.invalid", OUTRA])
     assert f"agora está em {OUTRA}, como assessor" in capsys.readouterr().out
     cli.main(["desligar-usuario", "caio@exemplo.invalid"])
     cli.main(["acessos", PJ])
+    assert "administração: saiu (movido)" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="não há promotoria"):
         cli.main(["acessos", "Inexistente"])

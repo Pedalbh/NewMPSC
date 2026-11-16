@@ -16,7 +16,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from . import VERSAO, autos, servicos
 from .config import Config, carregar
-from .modelos import Usuario, criar_banco
+from .modelos import Audiencia, Processo, Usuario, criar_banco
 from .nucleo import documento
 from .portas import MotorIndisponivel, SigIndisponivel, criar_conexao, criar_motor
 from .seguranca import LimiteTentativas, conferir_senha, csrf_confere, token_csrf
@@ -85,6 +85,13 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     telas.env.filters["data"] = lambda d: d.strftime("%d/%m/%Y") if d else "—"
     telas.env.filters["hora"] = lambda d: d.strftime("%H:%M") if d else ""
     telas.env.filters["dia_extenso"] = _dia_extenso
+
+    def _quando(d: datetime) -> str:
+        """Data curta para "quem mexeu": hoje, ontem ou o dia."""
+        dias = (datetime.now().date() - d.date()).days   # o mesmo relógio que carimba a alteração
+        dia = "hoje" if dias == 0 else "ontem" if dias == 1 else f"em {d:%d/%m/%Y}"
+        return f"{dia} às {d:%H:%M}"
+    telas.env.filters["quando"] = _quando
     # só o que as telas precisam saber do motor; o objeto (com o cliente e a chave) não vai para os modelos de tela
     telas.env.globals.update(versao=VERSAO, grupos=servicos.GRUPOS, config=config, ia=motor.usa_autos,
                              origem_ia=servicos.ORIGEM_IA, origem_em_branco=servicos.ORIGEM_EM_BRANCO,
@@ -166,12 +173,16 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     def meu_processo(processo_id: int, usuario=Depends(usuario_atual), db=Depends(banco)):
         p = servicos.processo_da_mesa(db, usuario, processo_id)
         if p is None:
+            if db.get(Processo, processo_id) is not None:   # existe, mas é de outra promotoria: fica anotado
+                servicos.registrar_acesso(db, usuario, "negado: processo de fora")
             raise HTTPException(404, "Processo não encontrado.")
         return p
 
     def minha_audiencia(audiencia_id: int, usuario=Depends(usuario_atual), db=Depends(banco)):
         a = servicos.audiencia_da_mesa(db, usuario, audiencia_id)
         if a is None:
+            if db.get(Audiencia, audiencia_id) is not None:
+                servicos.registrar_acesso(db, usuario, "negado: audiência de fora")
             raise HTTPException(404, "Audiência não encontrada.")
         return a
 
@@ -220,10 +231,14 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
                         erro="Sua conta não está em nenhuma promotoria. Fale com quem convidou você.")
         request.session.clear()   # sessão nova a cada login (evita fixação de sessão)
         request.session["uid"] = usuario.id
+        servicos.registrar_acesso(db, usuario, "entrou")
         return voltar("/")
 
     @app.post("/sair", dependencies=[Depends(exigir_csrf)])
-    def sair(request: Request):
+    def sair(request: Request, db=Depends(banco)):
+        usuario = db.get(Usuario, request.session.get("uid") or 0)
+        if usuario is not None:
+            servicos.registrar_acesso(db, usuario, "saiu")
         request.session.clear()
         return voltar("/entrar")
 
@@ -272,7 +287,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         except conexao.Recusada as e:
             avisar(request, "erro", f"A planilha não foi lida: {e}.")
             return voltar("/")
-        _resumo(request, res)
+        _resumo(request, res, usuario, db)
         return voltar("/")
 
     def exigir_busca_direta() -> None:
@@ -283,7 +298,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     def buscar(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
         """A fila pedida direto ao SIG, sem arquivo. Hoje só o SIG simulado atende."""
         try:
-            _resumo(request, servicos.buscar_fila(db, usuario, conexao, motor, config.dados_ficticios))
+            _resumo(request, servicos.buscar_fila(db, usuario, conexao, motor, config.dados_ficticios), usuario, db)
         except conexao.Recusada as e:
             avisar(request, "erro", f"A fila do {conexao.nome} não foi lida: {e}.")
         except SigIndisponivel:
@@ -294,10 +309,12 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     @app.post("/processos/colar", dependencies=[Depends(exigir_csrf)])
     async def colar(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
         texto = str((await request.form()).get("numeros") or "")[:20000]
-        _resumo(request, servicos.colar_numeros(db, usuario, texto, motor, config.dados_ficticios))
+        _resumo(request, servicos.colar_numeros(db, usuario, texto, motor, config.dados_ficticios), usuario, db)
         return voltar("/")
 
-    def _resumo(request: Request, res: servicos.ResultadoImportacao) -> None:
+    def _resumo(request: Request, res: servicos.ResultadoImportacao, usuario, db) -> None:
+        if res.novos or res.atualizados:
+            servicos.registrar_acesso(db, usuario, "trouxe processos")
         recusa = []
         if res.recusados:
             recusa = [("1 linha não entrou" if res.recusados == 1 else f"{res.recusados} linhas não entraram")
@@ -367,7 +384,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         p = db.merge(p)
         recusas, leituras, ressalvas = [], [], 0
         try:
-            with autos.vez_do_usuario(usuario.id):
+            # um envio por vez na promotoria: o teto de arquivos e a cota são conferidos sem corrida
+            with autos.vez_do_usuario(f"promotoria {p.promotoria_id}"):
                 prazo = time.monotonic() + TEMPO_ENVIO
                 for enviado in enviados[:MAX_PDFS_POR_ENVIO]:
                     nome = servicos.nome_de_arquivo(enviado.filename)
@@ -401,7 +419,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             if not servicos.remover_autos(db, db.merge(p), arquivo_id):
                 raise HTTPException(404, "Arquivo não encontrado.")
         except servicos.AutosRecusados as e:
-            raise HTTPException(409, str(e).capitalize() + ".") from None
+            raise HTTPException(409, _frase(e)) from None
         servicos.registrar_acesso(db, usuario, "removeu autos", p)
         avisar(request, "ok", "Arquivo removido dos autos.", "autos")
         return voltar(f"/processos/{p.id}#resultado-autos")
@@ -415,6 +433,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             no_sig = p.entrega is not None
             servicos.definir_situacao(db, p, nova, agora(), usuario)
         except servicos.SoPromotor as e:
+            servicos.registrar_acesso(db, usuario, "negado: tirar do SIG", p)
             raise HTTPException(403, _frase(e)) from None
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
@@ -436,9 +455,10 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         try:
             entrega = servicos.entregar_ao_sig(db, db.merge(p), usuario, conexao, agora(), config.dados_ficticios)
         except servicos.SoPromotor as e:
+            servicos.registrar_acesso(db, usuario, "negado: enviar ao SIG", p)
             raise HTTPException(403, _frase(e)) from None
         except ValueError as e:
-            raise HTTPException(409, str(e).capitalize() + ".") from None
+            raise HTTPException(409, _frase(e)) from None
         except SigIndisponivel:
             avisar(request, "erro", [f"O {conexao.nome} não respondeu. A minuta não foi enviada e continua aqui.",
                                      "Tente de novo em instantes. Se continuar, use Baixar ou copiar."])
@@ -462,6 +482,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             linhas = conexao.buscar_fila(usuario.email)["linhas"]
         except SigIndisponivel:
             raise HTTPException(503, f"O {conexao.nome} não respondeu. Tente de novo em instantes.") from None
+        servicos.registrar_acesso(db, usuario, "abriu o SIG simulado")
         entregas = servicos.entregas_da_mesa(db, usuario)
         recibos = {e.processo.numero: e.recibo for e in entregas}
         buscados = servicos.numeros_da_mesa(db, usuario)
@@ -472,11 +493,13 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
                     entregas=entregas)
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])
-    def refazer(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
+    async def refazer(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual),
+                      db=Depends(banco)):
+        versao = servicos.versao_da_tela((await request.form()).get("versao"))
         try:
-            servicos.refazer_minuta(db, db.merge(p), motor)
+            servicos.refazer_minuta(db, db.merge(p), motor, versao)
         except ValueError as e:
-            raise HTTPException(409, str(e).capitalize() + ".") from None
+            raise HTTPException(409, _frase(e)) from None
         servicos.registrar_acesso(db, usuario, "refez a minuta", p)
         avisar(request, "ok", "Minuta em branco de novo." if motor.usa_autos
                else "Minuta refeita pelo motor.")
@@ -490,10 +513,11 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     async def escrever(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual),
                        db=Depends(banco)):
         """Pede ao motor de IA o relatório a partir dos autos. A escrita roda fora da requisição."""
-        confirmado = (await request.form()).get("confirmo") == "1"
+        dados = await request.form()
+        confirmado, versao = dados.get("confirmo") == "1", servicos.versao_da_tela(dados.get("versao"))
         try:   # fora do laço de eventos: o pedido espera uma tranca e o banco
             tarefa = await run_in_threadpool(servicos.pedir_escrita, db, db.merge(p), usuario, motor,
-                                             config.dados_ficticios, confirmado)
+                                             config.dados_ficticios, confirmado, versao)
         except servicos.EscritaRecusada as e:
             avisar(request, "erro", f"O relatório não foi pedido: {e}.")
             return voltar(f"/processos/{p.id}")
@@ -514,9 +538,10 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             corpo = corpo if isinstance(corpo, dict) else {}
             versao = corpo.get("versao")
             p = db.merge(p)
-            primeira = p.minuta.editada_por != usuario.id   # o registro não ganha uma linha a cada tecla
+            primeira = servicos.edicao_a_registrar(p, usuario, datetime.now())
+            # a versão vem como número; texto, fração ou ausência não valem e nada é gravado
             m = servicos.salvar_minuta(db, p, corpo.get("blocos"), usuario,
-                                       versao if isinstance(versao, int) and not isinstance(versao, bool) else None)
+                                       servicos.versao_da_tela(versao) if isinstance(versao, int) else None)
         except servicos.MinutaMudou as e:
             raise HTTPException(409, _frase(e)) from None
         except ValueError as e:
@@ -564,19 +589,22 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
                                           str(d.get("hora") or ""), str(d.get("tipo") or ""), motor,
                                           config.dados_ficticios)
         except (ValueError, MotorIndisponivel) as e:
-            avisar(request, "erro", str(e).capitalize() + ".")
+            avisar(request, "erro", _frase(e))
             return voltar("/audiencias")
+        servicos.registrar_acesso(db, usuario, "marcou audiência")
         avisar(request, "ok", f"Audiência marcada para {a.inicio:%d/%m} às {a.inicio:%H:%M}, " +
                ("com a ficha em branco para preencher." if motor.usa_autos else "com a ficha pronta."))
         return voltar("/audiencias")
 
     @app.get("/audiencias/{audiencia_id}", response_class=HTMLResponse)
-    def ficha(request: Request, a=Depends(minha_audiencia), usuario=Depends(usuario_atual)):
+    def ficha(request: Request, a=Depends(minha_audiencia), usuario=Depends(usuario_atual), db=Depends(banco)):
+        servicos.registrar_acesso(db, usuario, "abriu ficha de audiência")
         return tela(request, "ficha.html", usuario=usuario, pagina="audiencias", a=a)
 
     @app.post("/audiencias/{audiencia_id}/remover", dependencies=[Depends(exigir_csrf)])
-    def remover(request: Request, a=Depends(minha_audiencia), db=Depends(banco)):
+    def remover(request: Request, a=Depends(minha_audiencia), usuario=Depends(usuario_atual), db=Depends(banco)):
         servicos.remover_audiencia(db, db.merge(a))
+        servicos.registrar_acesso(db, usuario, "removeu audiência")
         avisar(request, "ok", "Audiência removida da pauta.")
         return voltar("/audiencias")
 

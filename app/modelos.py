@@ -52,7 +52,8 @@ class Usuario(Base):
 
 class Processo(Base):
     __tablename__ = "processos"
-    __table_args__ = (UniqueConstraint("promotoria_id", "numero"),)
+    # o id nunca é reaproveitado: o registro de acessos aponta para ele mesmo depois de o processo ser apagado
+    __table_args__ = (UniqueConstraint("promotoria_id", "numero"), {"sqlite_autoincrement": True})
     id: Mapped[int] = mapped_column(primary_key=True)
     promotoria_id: Mapped[int] = mapped_column(ForeignKey("promotorias.id"), index=True)   # de quem é
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)         # quem trouxe
@@ -174,6 +175,7 @@ class EntregaSig(Base):
 
 class Audiencia(Base):
     __tablename__ = "audiencias"
+    __table_args__ = {"sqlite_autoincrement": True}
     id: Mapped[int] = mapped_column(primary_key=True)
     promotoria_id: Mapped[int] = mapped_column(ForeignKey("promotorias.id"), index=True)   # de quem é
     usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)         # quem marcou
@@ -194,7 +196,7 @@ class Acesso(Base):
     usuario_id: Mapped[int] = mapped_column(Integer, index=True)
     promotoria_id: Mapped[int] = mapped_column(Integer, index=True)
     processo_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
-    acao: Mapped[str] = mapped_column(String(30))
+    acao: Mapped[str] = mapped_column(String(60))
 
 
 def criar_banco(url: str, chave_impressao: bytes | None = None):
@@ -212,6 +214,13 @@ def criar_banco(url: str, chave_impressao: bytes | None = None):
             conexao.execute("PRAGMA secure_delete=ON")   # texto removido não fica nas páginas livres do arquivo
     Base.metadata.create_all(motor)
     _atualizar(motor, chave_impressao)
+    if url.startswith("sqlite"):
+        # o registro de acessos só acrescenta, também para quem escreve direto no banco
+        with motor.begin() as conexao:
+            for verbo in ("UPDATE", "DELETE"):
+                conexao.execute(text(
+                    f"CREATE TRIGGER IF NOT EXISTS acessos_sem_{verbo.lower()} BEFORE {verbo} ON acessos "   # noqa: S608
+                    "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
     return motor, sessionmaker(bind=motor, expire_on_commit=False)
 
 
@@ -276,18 +285,27 @@ def _passar_para_promotorias(conexao, tabelas) -> None:
         conexao.execute(text("UPDATE audiencias SET promotoria_id = "
                              "(SELECT promotoria_id FROM usuarios WHERE usuarios.id = audiencias.usuario_id)"))
         conexao.execute(text("CREATE INDEX IF NOT EXISTS ix_audiencias_promotoria_id ON audiencias (promotoria_id)"))
-    # o número era único por conta; passa a ser único por promotoria. No SQLite a regra antiga mora na definição
-    # da tabela: refaz-se a tabela com a regra nova (outros bancos entram com as migrações do Alembic, item 3).
-    if conexao.dialect.name == "sqlite" and "processos" in tabelas:
-        ddl = conexao.execute(text("SELECT sql FROM sqlite_master WHERE name = 'processos'")).scalar() or ""
-        if "UNIQUE (usuario_id, numero)" in ddl:
-            nova = ddl.replace("UNIQUE (usuario_id, numero)", "UNIQUE (promotoria_id, numero)") \
-                      .replace("CREATE TABLE processos", "CREATE TABLE processos_nova", 1)
-            indices = conexao.execute(text("SELECT sql FROM sqlite_master WHERE tbl_name = 'processos' "
-                                           "AND type = 'index' AND sql IS NOT NULL")).scalars().all()
+    # o número era único por conta; passa a ser único por promotoria, e o id deixa de ser reaproveitado. No
+    # SQLite as duas regras moram na definição da tabela: refaz-se a tabela (outros bancos entram com as
+    # migrações do Alembic, item 3).
+    if conexao.dialect.name == "sqlite":
+        for tabela in ("processos", "audiencias"):
+            ddl = conexao.execute(text("SELECT sql FROM sqlite_master WHERE name = :t"), {"t": tabela}).scalar() or ""
+            nova = ddl.replace("UNIQUE (usuario_id, numero)", "UNIQUE (promotoria_id, numero)")
+            if "AUTOINCREMENT" not in nova.upper():
+                if "id INTEGER NOT NULL, " in nova and "PRIMARY KEY (id), " in nova:
+                    nova = nova.replace("id INTEGER NOT NULL, ", "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, ", 1) \
+                               .replace("PRIMARY KEY (id), ", "", 1)
+                elif "id INTEGER PRIMARY KEY, " in nova:
+                    nova = nova.replace("id INTEGER PRIMARY KEY, ", "id INTEGER PRIMARY KEY AUTOINCREMENT, ", 1)
+            if not ddl or nova == ddl:
+                continue
+            nova = nova.replace(f"CREATE TABLE {tabela}", f"CREATE TABLE {tabela}_nova", 1)
+            indices = conexao.execute(text("SELECT sql FROM sqlite_master WHERE tbl_name = :t AND type = 'index' "
+                                           "AND sql IS NOT NULL"), {"t": tabela}).scalars().all()
             conexao.execute(text(nova))
-            conexao.execute(text("INSERT INTO processos_nova SELECT * FROM processos"))
-            conexao.execute(text("DROP TABLE processos"))
-            conexao.execute(text("ALTER TABLE processos_nova RENAME TO processos"))
+            conexao.execute(text(f"INSERT INTO {tabela}_nova SELECT * FROM {tabela}"))   # noqa: S608
+            conexao.execute(text(f"DROP TABLE {tabela}"))
+            conexao.execute(text(f"ALTER TABLE {tabela}_nova RENAME TO {tabela}"))
             for indice in indices:
                 conexao.execute(text(indice))

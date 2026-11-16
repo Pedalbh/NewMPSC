@@ -570,16 +570,16 @@ def test_minuta_editada_so_e_substituida_com_confirmacao(ana_ia, cliente_ia):
     # minuta em branco que a pessoa já mexeu: o botão principal continua à vista, com o aviso do que se perde
     html = ana_ia.get("/processos/1").text
     assert 'btn principal largo" type="submit">Escrever o relatório<' in html and "de novo" not in html
-    assert 'name="confirmo" value="1"' in html and "O que você escreveu na folha será substituído" in html
+    assert 'name="confirmo" value="1"' in html and "O que está escrito na folha será substituído" in html
     ana_ia.enviar("/processos/1/escrever")   # um pedido sem a confirmação não passa
-    assert "confirme que as suas alterações na minuta podem ser apagadas" in ana_ia.get("/processos/1").text
+    assert "confirme que as alterações feitas na minuta podem ser apagadas" in ana_ia.get("/processos/1").text
     assert cliente_ia.pedidos == [] and "Texto meu." in ana_ia.get("/processos/1").text
     ana_ia.enviar("/processos/1/escrever", {"confirmo": "1"})
     assert len(cliente_ia.pedidos) == 1 and "Texto meu." not in ana_ia.get("/processos/1").text
     # relatório de IA que a pessoa editou: escrever de novo fica recolhido, com botão de perigo
     salvar(ana_ia, "Relatório revisto por mim.")
     html = ana_ia.get("/processos/1").text
-    assert "Escrever o relatório de novo" in html and "Apagar minhas alterações e escrever" in html
+    assert "Escrever o relatório de novo" in html and "Apagar as alterações e escrever" in html
     assert 'btn principal largo" type="submit">Escrever' not in html
     ana_ia.enviar("/processos/1/escrever")
     assert len(cliente_ia.pedidos) == 1 and "Relatório revisto por mim." in ana_ia.get("/processos/1").text
@@ -772,3 +772,14 @@ def test_resposta_nao_e_citacao_mas_resp_continua_marcado():
     m = escrever({"relatorio": [{"texto": "Na resposta à acusação, a defesa pede a absolvição.",
                                  "fontes": [{"arquivo": 1, "pagina": 1}]}], "pontos_a_enfrentar": []})
     assert not any("[CONFERIR: citação]" in t for t in textos_de(m))
+
+
+def test_tela_aberta_antes_do_relatorio_nao_salva_por_cima_dele(ana_ia, cliente_ia, banco_ia):
+    """Achado nos pareceres do C18: o relatório nascia na versão 0, e a tecla seguinte de uma aba antiga o apagava."""
+    enviar_autos(ana_ia)
+    antes = ana_ia.versao(1)
+    ana_ia.enviar("/processos/1/escrever")
+    assert len(cliente_ia.pedidos) == 1 and ana_ia.versao(1) == antes + 1
+    r = ana_ia.put("/api/processos/1/minuta", json={"blocos": [{"texto": "Aba antiga.", "estilo": "corpo"}],
+                                                     "versao": antes}, headers={"X-CSRF-Token": ana_ia.csrf("/")})
+    assert r.status_code == 409 and "Aba antiga." not in ana_ia.get("/processos/1").text

@@ -73,11 +73,12 @@ def impressao(resumo_do_arquivo: str, chave: bytes, processo_id: int) -> str:
 
 
 @contextmanager
-def vez_do_usuario(usuario_id: int):
-    """Um envio em leitura por usuário: ninguém ocupa sozinho as vagas de leitura."""
+def vez_do_usuario(usuario_id):
+    """Um envio em leitura por vez para a chave dada (hoje, a promotoria): ninguém ocupa sozinho as vagas de
+    leitura, e dois envios da mesma mesa não passam juntos pelo teto de arquivos."""
     with _tranca:
         if usuario_id in _lendo:
-            raise Ocupado("já há um envio seu em leitura; espere terminar")
+            raise Ocupado("já há um envio da promotoria em leitura; espere terminar")
         _lendo.add(usuario_id)
     try:
         yield
