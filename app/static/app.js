@@ -93,28 +93,40 @@
   };
   destacar();
   if (folha && estado) {
-    let espera = null, pendente = false, salvando = false;
+    let espera = null, pendente = false, salvando = false, conflito = false;
+    let versao = Number(folha.dataset.versao || 0);   // a versão que esta tela carregou: o servidor confere ao salvar
     const marcar = (texto, classe) => { estado.textContent = texto; estado.className = "selo empurra " + (classe || ""); };
     const blocos = () => [...folha.querySelectorAll(".b")]
       .map((p) => ({ texto: p.innerText.replace(/ /g, " ").trim(), estilo: p.dataset.estilo }))
       .filter((b) => b.texto);
 
     const salvar = async () => {
+      if (conflito) return;   // outra pessoa salvou por cima: nada daqui é gravado até recarregar
       if (salvando) { pendente = true; return; }
       salvando = true; pendente = false; marcar("Salvando…", "andamento");
       try {
         const r = await fetch(folha.dataset.salvar, {
           method: "PUT", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-          body: JSON.stringify({ blocos: blocos() }),
+          body: JSON.stringify({ blocos: blocos(), versao }),
         });
         const d = await r.json().catch(() => ({}));
-        if (r.ok) marcar("Salva às " + d.salva_em, "ok");
-        else marcar(d.erro || "Não salvou", "erro");
+        if (r.ok) {
+          versao = d.versao; marcar("Salva às " + d.salva_em, "ok");
+          // refazer e escrever por cima conferem a mesma versão: os formulários acompanham
+          document.querySelectorAll('input[name="versao"]').forEach((campo) => { campo.value = versao; });
+        } else if (r.status === 409) {
+          // outra pessoa salvou antes: a folha trava (nada digitado daqui em diante se perderia calado)
+          conflito = true; pendente = false; marcar("Não salvou", "erro");
+          folha.querySelectorAll(".b").forEach((p) => { p.contentEditable = "false"; });
+          const aviso = document.getElementById("conflito");
+          aviso.hidden = false; aviso.focus();
+        } else marcar(d.erro || "Não salvou", "erro");
       } catch { marcar("Sem conexão: não salvou", "erro"); }
       salvando = false;
       if (pendente) salvar();
     };
     const agendar = () => {
+      if (conflito) return;
       marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar(); contar();
     };
 
@@ -179,6 +191,17 @@
       formulario.dataset.pronto = "1"; formulario.submit();
     });
   }
+
+  const copiarConflito = document.getElementById("copiar-conflito");
+  copiarConflito?.addEventListener("click", async () => {
+    const original = copiarConflito.textContent;
+    try {
+      await navigator.clipboard.writeText(
+        [...folha.querySelectorAll(".b")].map((p) => p.innerText.trim()).filter(Boolean).join("\n\n"));
+      copiarConflito.textContent = "Copiado";
+    } catch { copiarConflito.textContent = "Não foi possível copiar"; }
+    setTimeout(() => { copiarConflito.textContent = original; }, 1800);
+  });
 
   const copiar = document.getElementById("copiar");
   copiar?.addEventListener("click", async () => {

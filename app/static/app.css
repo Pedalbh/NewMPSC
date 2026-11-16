@@ -45,6 +45,8 @@ a { color: inherit; text-decoration: none; }
 .pequeno { font-size: 13px; line-height: 20px; }
 .rotulo { font: 600 12px/16px var(--fonte); letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-fraca); }
 .num { font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -.005em; }
+/* o atributo hidden vale sempre, mesmo em quem tem display próprio (avisos, linhas) */
+[hidden] { display: none !important; }
 .oculto-visual { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 :where(a, button, input, select, textarea, summary, [contenteditable]):focus-visible { outline: 2px solid var(--primaria); outline-offset: 2px; border-radius: var(--raio-p); }
 .pular { position: absolute; left: -999px; top: 8px; background: var(--primaria); color: var(--sobre-primaria); padding: 8px 14px; border-radius: var(--raio-p); z-index: 10; }

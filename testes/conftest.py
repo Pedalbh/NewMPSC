@@ -44,10 +44,21 @@ def csrf_de(resposta) -> str:
 
 
 class Cliente(TestClient):
-    """Cliente que cuida do token CSRF como o navegador faria."""
+    """Cliente que cuida do token CSRF e da versão da minuta como o navegador faria."""
 
     def csrf(self, caminho="/entrar") -> str:
         return csrf_de(self.get(caminho))
+
+    def versao(self, processo) -> int | None:
+        """A versão da minuta que a tela do processo mostra agora (a que a casca manda de volta ao salvar)."""
+        achado = re.search(r'data-versao="(\d+)"', self.get(f"/processos/{processo}").text)
+        return int(achado.group(1)) if achado else None
+
+    def put(self, url, *a, json=None, **kw):
+        achado = re.fullmatch(r"/api/processos/(\d+)/minuta", str(url))
+        if achado and isinstance(json, dict) and "blocos" in json and "versao" not in json:
+            json = json | {"versao": self.versao(achado.group(1))}
+        return super().put(url, *a, json=json, **kw)
 
     def entrar(self, email, senha=SENHA):
         return self.post("/entrar", data={"email": email, "senha": senha, "csrf": self.csrf()},
@@ -55,6 +66,10 @@ class Cliente(TestClient):
 
     def enviar(self, caminho, dados=None, pagina="/", **kw):
         dados = dict(dados or {}, csrf=self.csrf(pagina))
+        achado = re.fullmatch(r"/processos/(\d+)/(refazer|escrever)", caminho)
+        if achado and "versao" not in dados:   # os formulários da tela levam a versão que ela carregou
+            versao = self.versao(achado.group(1))
+            dados |= {} if versao is None else {"versao": versao}
         return self.post(caminho, data=dados, follow_redirects=False, **kw)
 
     def importar_fila(self):

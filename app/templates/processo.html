@@ -4,19 +4,35 @@
 {% set de_ia = minuta.motor == origem_ia %}
 {# com o SIG direto, concluir e desfazer ficam junto do envio, à vista; sem ele, no cartão do processo #}
 {% set situacao_na_minuta = sig_direto and not escrevendo %}
-{% macro mudar_situacao() %}
+{% set promotor = usuario.papel == 'promotor' %}
+{% macro concluir() %}
       <form method="post" action="/processos/{{ p.id }}/situacao">
         <input type="hidden" name="csrf" value="{{ csrf }}">
-        {% if p.situacao == 'a_fazer' %}
         <input type="hidden" name="situacao" value="concluido">
         <button class="btn largo" type="submit">{{ 'Concluir sem enviar ao SIG' if sig_direto else 'Marcar como concluído' }}</button>
-        {% else %}
+      </form>
+{% endmacro %}
+{% macro mudar_situacao() %}
+      {% if p.situacao == 'a_fazer' and sig_direto and not promotor %}
+      {# para o assessor, concluir tira o processo da mesa do promotor: fica recolhido, não é o botão da tela #}
+      <details id="concluir-assessor">
+        <summary>Já foi resolvido fora daqui?</summary>
+        <div class="pilha">
+          <p class="fraco pequeno">Concluir tira o processo da mesa da promotoria sem enviar nada ao SIG.</p>
+          {{ concluir() }}
+        </div>
+      </details>
+      {% elif p.situacao == 'a_fazer' %}
+      {{ concluir() }}
+      {% if sig_direto %}<p class="fraco pequeno">Use se já resolveu este processo fora daqui.</p>{% endif %}
+      {% elif not p.entrega or promotor %}
+      <form method="post" action="/processos/{{ p.id }}/situacao">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="situacao" value="a_fazer">
         <button class="btn largo" type="submit">{{ 'Tirar do SIG e voltar à mesa' if p.entrega else 'Devolver à fila' }}</button>
-        {% endif %}
       </form>
-      {% if sig_direto and p.situacao == 'a_fazer' %}<p class="fraco pequeno">Use se já resolveu este processo fora daqui.</p>
-      {% elif p.entrega %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a sua fila.</p>{% endif %}
+      {% if p.entrega %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a fila.</p>{% endif %}
+      {% endif %}
 {% endmacro %}
 <nav class="trilha" aria-label="Você está em"><a class="elo" href="/">‹ Processos</a></nav>
 <section class="cabecalho-proc">
@@ -59,7 +75,15 @@
       <p>Confira cada página citada e complete os trechos entre colchetes. A fundamentação e o pedido são seus.</p>
     </div>
     {% endif %}
-    <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" aria-label="Texto da minuta, editável">
+    <div class="aviso erro" id="conflito" role="alert" tabindex="-1" hidden>
+      <p>Outra pessoa alterou esta minuta.</p>
+      <p>O que você escreveu depois disso não foi salvo, e a folha está travada. Copie o seu texto e carregue a versão nova.</p>
+      <div class="linha">
+        <button class="btn" type="button" id="copiar-conflito">Copiar o que escrevi</button>
+        <a class="btn principal" href="/processos/{{ p.id }}" id="carregar-nova">Carregar a versão nova</a>
+      </div>
+    </div>
+    <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" data-versao="{{ minuta.versao or 0 }}" aria-label="Texto da minuta, editável">
       {% for b in minuta.blocos %}<p class="b b-{{ b.estilo }}" data-estilo="{{ b.estilo }}" contenteditable="true" spellcheck="true">{{ b.texto }}</p>{% endfor %}
     </div>
     {% endif %}
@@ -71,6 +95,9 @@
         <h2>Minuta</h2>
         {% if not escrevendo %}<span class="selo empurra" id="estado-salvar" role="status" aria-live="polite">{{ 'Salva às ' ~ (minuta.atualizada_em | hora) if minuta.editada else 'Sem alterações' }}</span>{% endif %}
       </div>
+      {% if minuta.editor and minuta.editor.id != usuario.id %}
+      <p class="fraco pequeno" id="quem-editou">Alterada por {{ minuta.editor.nome }} {{ minuta.atualizada_em | quando }}.</p>
+      {% endif %}
       {% if escrevendo %}
       <p class="fraco">Aguarde o relatório para baixar ou copiar.</p>
       {% else %}
@@ -80,14 +107,20 @@
       <p class="pequeno" id="no-sig">No {{ sig_nome }} como rascunho desde {{ p.entrega.recebida_em | data }} às {{ p.entrega.recebida_em | hora }} (recibo {{ p.entrega.recibo }}). Falta assinar e protocolar lá.</p>
       {% endif %}
       <div class="aviso atencao pequeno" id="antes-de-enviar" role="status" {% if not pendentes and not mudou %}hidden{% endif %}>
-        {% if mudou %}<p id="mudou">A minuta mudou depois do envio. O rascunho no SIG é o anterior.</p>{% endif %}
+        {% if mudou %}<p id="mudou">A minuta mudou depois do envio. O rascunho no SIG é o anterior.{% if not promotor %} Avise o promotor para trocar o rascunho.{% endif %}</p>{% endif %}
         <p id="trechos" {% if not pendentes %}hidden{% endif %}>{{ '1 trecho entre colchetes a completar' if pendentes == 1 else pendentes ~ ' trechos entre colchetes a completar' }}</p>
       </div>
+      {% if not promotor and p.entrega %}
+      <p class="pequeno" id="so-promotor-tira">Só o promotor troca ou tira o rascunho do SIG.</p>
+      {% elif not promotor %}
+      <p class="pequeno" id="so-promotor">Deixe a minuta pronta. Quem envia ao SIG é o promotor, nesta mesma tela.</p>
+      {% else %}
       <form method="post" action="/processos/{{ p.id }}/entregar" id="form-entregar">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn {{ 'principal' if not em_branco and not pendentes and (mudou or not p.entrega) }} largo" type="submit" id="enviar-sig" {% if not em_branco and (mudou or not p.entrega) %}data-principal{% endif %}>{{ 'Trocar o rascunho no SIG' if p.entrega else 'Enviar ao ' ~ sig_nome }}</button>
       </form>
       <p class="fraco pequeno">{{ 'O rascunho que está lá é substituído por esta versão.' if p.entrega else 'Vai como rascunho, sem assinatura. Você assina e protocola no SIG.' }}</p>
+      {% endif %}
       {{ mudar_situacao() }}
       <details>
         <summary>Baixar ou copiar</summary>
@@ -146,7 +179,7 @@
       {% endif %}
       {% endif %}
       {% if p.situacao == 'concluido' %}
-      <p class="fraco pequeno">Para enviar autos, devolva o processo à fila.</p>
+      <p class="fraco pequeno">{{ 'Os autos só voltam a aceitar arquivo se o promotor tirar o rascunho do SIG.' if p.entrega and not promotor else 'Para enviar autos, devolva o processo à fila.' }}</p>
       {% elif escrevendo %}
       <p class="fraco pequeno">O relatório está sendo escrito com estes autos. Para enviar ou remover arquivos, espere terminar.</p>
       {% else %}
@@ -164,17 +197,19 @@
       <form method="post" action="/processos/{{ p.id }}/escrever">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <input type="hidden" name="confirmo" value="1">
+        <input type="hidden" name="versao" value="{{ minuta.versao or 0 }}">
         <button class="btn principal largo" type="submit">Escrever o relatório</button>
       </form>
-      <p class="fraco pequeno">O que você escreveu na folha será substituído pelo relatório.</p>
+      <p class="fraco pequeno">O que está escrito na folha será substituído pelo relatório.</p>
       {% elif minuta.editada %}
       <details>
         <summary>Escrever o relatório de novo</summary>
         <form method="post" action="/processos/{{ p.id }}/escrever" class="pilha">
           <input type="hidden" name="csrf" value="{{ csrf }}">
           <input type="hidden" name="confirmo" value="1">
-          <p class="fraco pequeno">O texto atual da minuta, com as suas alterações, será apagado e trocado pelo relatório novo.</p>
-          <button class="btn perigo" type="submit">Apagar minhas alterações e escrever</button>
+          <input type="hidden" name="versao" value="{{ minuta.versao or 0 }}">
+          <p class="fraco pequeno">O texto atual da minuta, com as alterações feitas nela, será apagado e trocado pelo relatório novo.</p>
+          <button class="btn perigo" type="submit">Apagar as alterações e escrever</button>
         </form>
       </details>
       {% else %}
@@ -207,7 +242,8 @@
         <summary>{{ 'Voltar à minuta em branco' if ia else 'Refazer a minuta do zero' }}</summary>
         <form method="post" action="/processos/{{ p.id }}/refazer" class="pilha">
           <input type="hidden" name="csrf" value="{{ csrf }}">
-          <p class="fraco pequeno">O texto atual, com as suas alterações, é substituído.</p>
+          <input type="hidden" name="versao" value="{{ minuta.versao or 0 }}">
+          <p class="fraco pequeno">O texto atual, com as alterações feitas nele, é substituído.</p>
           <button class="btn perigo" type="submit">{{ 'Apagar e voltar ao branco' if ia else 'Refazer' }}</button>
         </form>
       </details>

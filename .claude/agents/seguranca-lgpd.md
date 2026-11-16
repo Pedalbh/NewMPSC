@@ -11,7 +11,7 @@ Como revisar (referência: OWASP ASVS nível 2 e LGPD):
 1. Leia `CLAUDE.md`, `docs/ARQUITETURA.md` e o diff contra `main`.
 2. Confira:
    - autenticação e sessão: hash de senha, renovação da sessão no login, cookie `HttpOnly`/`Secure`/`SameSite`, limite de tentativas, saída;
-   - autorização: toda rota e toda consulta filtram pelo usuário; tente acessar o dado de outro usuário;
+   - autorização: toda rota e toda consulta filtram pela promotoria de quem pede (limite 3); tente acessar o dado de outra promotoria, e o que é só do promotor com conta de assessor;
    - CSRF em todo POST e PUT; CSP sem `unsafe-inline`; saída escapada;
    - envio de arquivo: teto de tamanho, formato conferido pelo conteúdo, nada executado;
    - segredo fora do código e do histórico do git; dependências com versão fixa e sem falha conhecida;

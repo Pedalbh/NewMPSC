@@ -2,6 +2,31 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.6.0] - 2026-11-16
+
+### Adicionado
+- Espaço da promotoria (cartão C18): quem é da mesma promotoria vê a mesma mesa, com a fila, as minutas, os autos e a pauta. Ninguém de fora vê.
+- Dois papéis: promotor e assessor. Os dois preparam a minuta; só o promotor envia ao SIG e tira o rascunho de lá.
+- A tela do processo mostra quem alterou a minuta por último.
+- Se duas pessoas editam a mesma minuta, quem salva depois é avisado e o texto da outra fica: a folha trava, e a tela oferece copiar o que a pessoa escreveu e carregar a versão nova. Vale também depois de refazer a minuta ou de o relatório da IA chegar. Antes, o último salvamento apagava o anterior sem aviso.
+- Na fila, o selo "Editada por Fulano" mostra a minuta em que outra pessoa mexeu por último.
+- Registro de acessos: quem entrou, abriu, editou, baixou ou enviou cada processo, as tentativas negadas e os atos de quem administra, com data e hora, sem conteúdo. Só acrescenta. Listado por `python -m app.cli acessos "Promotoria"`.
+- Linha de comando: `criar-promotoria` abre a mesa; `criar-usuario` recebe a promotoria (que precisa existir) e o papel; `mover-usuario` e `desligar-usuario` trocam ou tiram o acesso na hora, mesmo com a sessão aberta.
+- Cartões C20 (quem lê o registro de acessos e por quanto tempo ele fica) e C21 (se o assessor pede o relatório à IA).
+
+### Alterado
+- Limite 3 do projeto (`CLAUDE.md`), pelo cartão C18: cada promotoria vê só o que é seu.
+- A promotoria deixa de ser um texto que a pessoa edita em "Seus dados": é definida por quem administra.
+- Banco de versão anterior: na partida, cada conta ganha uma promotoria só dela e leva o que era seu. Contas não são juntadas sozinhas.
+- Os pedidos à IA ficam em nome de quem pediu; a cota de texto dos autos passa a contar por promotoria, com um envio de autos por vez em cada uma.
+- Para o assessor, "Concluir sem enviar ao SIG" fica recolhido: concluir tira o processo da mesa do promotor.
+- `apagar-processo` apaga o processo da promotoria da pessoa, e não mais só o da conta.
+
+### Corrigido
+- Avisos marcados como escondidos apareciam mesmo assim, como uma caixa vazia (o estilo vencia o atributo).
+- Mensagens de recusa não trocam mais "SIG" por "sig".
+- Duas pessoas trazendo a mesma fila ao mesmo tempo recebem um aviso, em vez de erro.
+
 ## [0.5.1] - 2026-11-16
 
 ### Adicionado

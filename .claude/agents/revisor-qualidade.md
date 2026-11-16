@@ -13,7 +13,7 @@ Como revisar:
 3. Confira, nesta ordem:
    - a mudança faz o que a descrição diz, para quem usa?
    - há teste que falharia sem a mudança? Tela nova ou alterada está na jornada de `testes/test_navegador.py`?
-   - toda consulta nova filtra pelo usuário? Todo POST e PUT novo exige o token CSRF?
+   - toda consulta nova filtra pela promotoria de quem pede (limite 3)? Todo POST e PUT novo exige o token CSRF?
    - entrada validada no servidor (tetos, listas fechadas)? Nada de script ou estilo embutido no HTML?
    - IA e SIG só pelas portas de `app/portas.py`? Só dados fictícios, com dígito verificador inválido?
    - versão e `CHANGELOG.md` atualizados, se a mudança é visível?

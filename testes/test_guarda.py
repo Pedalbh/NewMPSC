@@ -9,7 +9,7 @@ from app import autos, cli
 from app.cli import criar_usuario
 from app.config import Config
 from app.main import criar_app
-from app.modelos import ArquivoAutos, Minuta, PaginaAutos, Processo, TarefaMinuta, criar_banco
+from app.modelos import ArquivoAutos, Minuta, PaginaAutos, Processo, TarefaMinuta, Usuario, criar_banco
 from testes.conftest import SENHA, Cliente
 from testes.fabrica_pdf import AUTOS_FICTICIOS, pdf
 
@@ -280,7 +280,7 @@ def test_processo_concluido_nao_pede_relatorio(app_relogio, banco):
         usa_autos = True
 
     with pytest.raises(servicos.EscritaRecusada, match="concluído"):
-        servicos.pedir_escrita(banco, banco.get(Processo, 1), MotorDeIA(), True)
+        servicos.pedir_escrita(banco, banco.get(Processo, 1), banco.get(Usuario, 1), MotorDeIA(), True)
 
 
 def test_devolvido_a_fila_durante_a_limpeza_nao_perde_os_autos(app_relogio, banco, relogio, monkeypatch):

@@ -77,7 +77,7 @@ def test_devolver_a_fila_retira_o_rascunho_e_enviar_de_novo_troca(logada, banco)
     assert banco.query(EntregaSig).count() == 0
     assert "O rascunho saiu do SIG simulado" in logada.get("/processos/1").text
     logada.enviar("/processos/1/entregar")
-    assert "O processo saiu da sua mesa" in logada.get("/").text
+    assert "O processo saiu da mesa" in logada.get("/").text
     logada.enviar("/processos/1/entregar")   # já concluído: troca o rascunho, não duplica
     aviso = logada.get("/").text
     assert "O rascunho anterior foi substituído." in aviso and "saiu da sua mesa" not in aviso

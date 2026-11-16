@@ -1,4 +1,4 @@
-"""Tabelas. Cada linha de trabalho pertence a um usuário; ninguém enxerga dado de outro."""
+"""Tabelas. Cada linha de trabalho pertence a uma promotoria; ninguém de fora enxerga (limite 3, cartão C18)."""
 from datetime import datetime
 
 from sqlalchemy import (
@@ -24,22 +24,39 @@ class Base(DeclarativeBase):
     pass
 
 
+PAPEIS = ("promotor", "assessor")   # só o promotor envia ao SIG; os dois veem e editam a mesa da promotoria
+
+
+class Promotoria(Base):
+    """O espaço de trabalho: quem é da mesma promotoria vê a mesma mesa (cartão C18)."""
+    __tablename__ = "promotorias"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nome: Mapped[str] = mapped_column(String(160), unique=True)
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(254), unique=True)
     nome: Mapped[str] = mapped_column(String(120))
     cargo: Mapped[str] = mapped_column(String(120), default="")
-    promotoria: Mapped[str] = mapped_column(String(160), default="")
+    promotoria: Mapped[str] = mapped_column(String(160), default="")   # texto antigo; hoje vale `promotoria_id`
+    # sem promotoria a conta não entra: é assim que quem sai perde o acesso na hora
+    promotoria_id: Mapped[int | None] = mapped_column(ForeignKey("promotorias.id"), index=True, nullable=True)
+    papel: Mapped[str] = mapped_column(String(20), default="promotor")
+    espaco: Mapped["Promotoria | None"] = relationship(lazy="joined")
     senha_hash: Mapped[str] = mapped_column(String(255))
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
 
 class Processo(Base):
     __tablename__ = "processos"
-    __table_args__ = (UniqueConstraint("usuario_id", "numero"),)
+    # o id nunca é reaproveitado: o registro de acessos aponta para ele mesmo depois de o processo ser apagado
+    __table_args__ = (UniqueConstraint("promotoria_id", "numero"), {"sqlite_autoincrement": True})
     id: Mapped[int] = mapped_column(primary_key=True)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    promotoria_id: Mapped[int] = mapped_column(ForeignKey("promotorias.id"), index=True)   # de quem é
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)         # quem trouxe
     numero: Mapped[str] = mapped_column(String(25))
     numero_sig: Mapped[str] = mapped_column(String(30), default="")
     classe: Mapped[str] = mapped_column(String(200), default="")
@@ -72,7 +89,11 @@ class Minuta(Base):
     motor: Mapped[str] = mapped_column(String(40))
     editada: Mapped[bool] = mapped_column(Boolean, default=False)
     atualizada_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    # duas pessoas na mesma minuta: quem salva sobre uma versão que já mudou é avisado, em vez de apagar a outra
+    versao: Mapped[int] = mapped_column(Integer, default=0)
+    editada_por: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     processo: Mapped[Processo] = relationship(back_populates="minuta")
+    editor: Mapped["Usuario | None"] = relationship()
 
 
 class TarefaMinuta(Base):
@@ -138,7 +159,7 @@ class EntregaSig(Base):
     Hoje só o SIG simulado cria (protótipo, dados fictícios); é o que a tela "SIG simulado" mostra."""
     __tablename__ = "entregas_sig"
     id: Mapped[int] = mapped_column(primary_key=True)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)   # quem enviou
     processo_id: Mapped[int] = mapped_column(ForeignKey("processos.id"), unique=True)
     recibo: Mapped[str] = mapped_column(String(40))
     tipo: Mapped[str] = mapped_column(String(120), default="")
@@ -154,14 +175,28 @@ class EntregaSig(Base):
 
 class Audiencia(Base):
     __tablename__ = "audiencias"
+    __table_args__ = {"sqlite_autoincrement": True}
     id: Mapped[int] = mapped_column(primary_key=True)
-    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    promotoria_id: Mapped[int] = mapped_column(ForeignKey("promotorias.id"), index=True)   # de quem é
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)         # quem marcou
     numero: Mapped[str] = mapped_column(String(25))
     inicio: Mapped[datetime] = mapped_column(DateTime, index=True)
     tipo: Mapped[str] = mapped_column(String(80), default="Instrução e julgamento")
     ficha: Mapped[dict] = mapped_column(JSON)
     motor: Mapped[str] = mapped_column(String(40))
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class Acesso(Base):
+    """Registro de acessos: quem fez o quê em qual processo, e quando. Sem conteúdo. Só acrescenta: nenhuma
+    rota altera nem apaga linha daqui."""
+    __tablename__ = "acessos"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    quando: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
+    usuario_id: Mapped[int] = mapped_column(Integer, index=True)
+    promotoria_id: Mapped[int] = mapped_column(Integer, index=True)
+    processo_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    acao: Mapped[str] = mapped_column(String(60))
 
 
 def criar_banco(url: str, chave_impressao: bytes | None = None):
@@ -179,6 +214,13 @@ def criar_banco(url: str, chave_impressao: bytes | None = None):
             conexao.execute("PRAGMA secure_delete=ON")   # texto removido não fica nas páginas livres do arquivo
     Base.metadata.create_all(motor)
     _atualizar(motor, chave_impressao)
+    if url.startswith("sqlite"):
+        # o registro de acessos só acrescenta, também para quem escreve direto no banco
+        with motor.begin() as conexao:
+            for verbo in ("UPDATE", "DELETE"):
+                conexao.execute(text(
+                    f"CREATE TRIGGER IF NOT EXISTS acessos_sem_{verbo.lower()} BEFORE {verbo} ON acessos "   # noqa: S608
+                    "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
     return motor, sessionmaker(bind=motor, expire_on_commit=False)
 
 
@@ -191,6 +233,7 @@ def _atualizar(motor, chave_impressao: bytes | None) -> None:
     if "sha256" in antigas and "impressao" not in antigas and not chave_impressao:   # antes de mudar qualquer coisa
         raise RuntimeError("banco antigo: a conversão das impressões dos autos precisa da chave do servidor")
     with motor.begin() as conexao:
+        _passar_para_promotorias(conexao, tabelas)
         colunas = {c["name"] for c in inspect(conexao).get_columns("processos")} if "processos" in tabelas else set()
         if colunas and "concluido_em" not in colunas:
             tipo = DateTime().compile(dialect=motor.dialect)
@@ -209,3 +252,60 @@ def _atualizar(motor, chave_impressao: bytes | None) -> None:
         if colunas:   # cartão C2: tamanho exato e caracteres exatos deixam de ficar (repetir não muda nada)
             conexao.execute(text("UPDATE arquivos_autos SET tamanho = 0, "
                                  "caracteres = ((caracteres + 999) / 1000) * 1000 WHERE tamanho <> 0"))
+
+
+def _passar_para_promotorias(conexao, tabelas) -> None:
+    """Cartão C18: banco de antes do espaço da promotoria. Cada conta antiga ganha a sua própria promotoria e leva
+    para ela o que era seu. Contas com o mesmo texto de promotoria NÃO são juntadas: juntar é ato de quem
+    administra (`app.cli mover-usuario`), nunca coincidência de texto."""
+    def colunas(tabela):
+        return {c["name"] for c in inspect(conexao).get_columns(tabela)} if tabela in tabelas else set()
+
+    def acrescentar(tabela, coluna, tipo):
+        if colunas(tabela) and coluna not in colunas(tabela):
+            conexao.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {tipo}"))
+            return True
+        return False
+
+    acrescentar("usuarios", "papel", "VARCHAR(20) DEFAULT 'promotor'")
+    acrescentar("minutas", "versao", "INTEGER DEFAULT 0")
+    acrescentar("minutas", "editada_por", "INTEGER")
+    if acrescentar("usuarios", "promotoria_id", "INTEGER"):
+        for uid, nome in conexao.execute(text("SELECT id, nome FROM usuarios")).all():
+            conexao.execute(text("INSERT INTO promotorias (nome, criado_em) VALUES (:n, :q)")
+                            .bindparams(bindparam("q", type_=DateTime)),
+                            {"n": f"Mesa de {nome} ({uid})"[:160], "q": datetime.now()})
+            conexao.execute(text("UPDATE usuarios SET promotoria_id = (SELECT max(id) FROM promotorias) "
+                                 "WHERE id = :u"), {"u": uid})
+    if acrescentar("processos", "promotoria_id", "INTEGER"):
+        conexao.execute(text("UPDATE processos SET promotoria_id = "
+                             "(SELECT promotoria_id FROM usuarios WHERE usuarios.id = processos.usuario_id)"))
+        conexao.execute(text("CREATE INDEX IF NOT EXISTS ix_processos_promotoria_id ON processos (promotoria_id)"))
+    if acrescentar("audiencias", "promotoria_id", "INTEGER"):
+        conexao.execute(text("UPDATE audiencias SET promotoria_id = "
+                             "(SELECT promotoria_id FROM usuarios WHERE usuarios.id = audiencias.usuario_id)"))
+        conexao.execute(text("CREATE INDEX IF NOT EXISTS ix_audiencias_promotoria_id ON audiencias (promotoria_id)"))
+    # o número era único por conta; passa a ser único por promotoria, e o id deixa de ser reaproveitado. No
+    # SQLite as duas regras moram na definição da tabela: refaz-se a tabela (outros bancos entram com as
+    # migrações do Alembic, item 3).
+    if conexao.dialect.name == "sqlite":
+        for tabela in ("processos", "audiencias"):
+            ddl = conexao.execute(text("SELECT sql FROM sqlite_master WHERE name = :t"), {"t": tabela}).scalar() or ""
+            nova = ddl.replace("UNIQUE (usuario_id, numero)", "UNIQUE (promotoria_id, numero)")
+            if "AUTOINCREMENT" not in nova.upper():
+                if "id INTEGER NOT NULL, " in nova and "PRIMARY KEY (id), " in nova:
+                    nova = nova.replace("id INTEGER NOT NULL, ", "id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, ", 1) \
+                               .replace("PRIMARY KEY (id), ", "", 1)
+                elif "id INTEGER PRIMARY KEY, " in nova:
+                    nova = nova.replace("id INTEGER PRIMARY KEY, ", "id INTEGER PRIMARY KEY AUTOINCREMENT, ", 1)
+            if not ddl or nova == ddl:
+                continue
+            nova = nova.replace(f"CREATE TABLE {tabela}", f"CREATE TABLE {tabela}_nova", 1)
+            indices = conexao.execute(text("SELECT sql FROM sqlite_master WHERE tbl_name = :t AND type = 'index' "
+                                           "AND sql IS NOT NULL"), {"t": tabela}).scalars().all()
+            conexao.execute(text(nova))
+            conexao.execute(text(f"INSERT INTO {tabela}_nova SELECT * FROM {tabela}"))   # noqa: S608
+            conexao.execute(text(f"DROP TABLE {tabela}"))
+            conexao.execute(text(f"ALTER TABLE {tabela}_nova RENAME TO {tabela}"))
+            for indice in indices:
+                conexao.execute(text(indice))

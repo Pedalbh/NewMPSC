@@ -22,6 +22,13 @@ Uma mesa única: a fila de processos por prioridade, a minuta de cada um e a pau
 - Em **Audiências**, informe o número, a data, a hora e o tipo.
 - Cada audiência ganha uma ficha. O início mostra as dos próximos sete dias.
 
+## Promotor e assessor
+- Quem é da mesma promotoria vê a mesma mesa. Ninguém de fora vê.
+- O assessor prepara a minuta. Só o promotor envia ao SIG.
+- A fila e a tela do processo mostram quem alterou a minuta por último.
+- Se duas pessoas mexerem ao mesmo tempo, quem salvar depois recebe um aviso: copie o seu texto e carregue a versão nova.
+- A aplicação anota quem abriu, editou, baixou e enviou cada processo, e quando.
+
 ## O que a aplicação não faz
 - Não assina e não protocola.
 - Não escreve no SIG de verdade nem no eproc. No ensaio, o "SIG" é simulado.

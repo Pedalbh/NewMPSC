@@ -35,6 +35,34 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **O que espera:** o começo da Fase 1 com os participantes. Roteiro, guia e termo já estão em `docs/piloto/`.
 - **O que você faz:** contratar o serviço escolhido (opções A e B) ou levar o pedido à TI (opção C).
 
+### C20 · Registro de acessos: quem pode ler, e por quanto tempo fica?
+- **Por que é sua:** dado e LGPD (prazo de guarda) e regras do projeto.
+- **Hoje:** desde a 0.6.0 a aplicação anota quem entrou, abriu, editou, baixou ou enviou cada processo, as tentativas negadas e os atos de quem administra, com data e hora. Não guarda conteúdo nem endereço de rede. Ninguém lê pela tela: só quem opera o servidor, pela linha de comando (hoje, o coordenador; não há hospedagem institucional). As linhas não têm prazo: ficam para sempre, mesmo depois de o processo ou a pessoa sair. O registro diz o que cada pessoa fez e a que horas, então é dado pessoal de quem trabalha, e isso já vale no ensaio da Fase 1.
+- **Opções:**
+  - **A. O promotor lê o da sua promotoria; guarda de 1 ano.** Uma tela simples, só para o promotor. Ele passa a ver a que horas cada assessor abriu e editou cada processo: é acompanhamento do trabalho de colega, e o termo dos participantes precisa dizer isso. Linhas com mais de um ano são apagadas sozinhas.
+    **Depois da decisão:** o coordenador constrói a tela e a limpeza, com teste de isolamento e os três revisores, e põe a leitura e o prazo no termo.
+  - **B. Só quem opera o servidor lê; guarda de 1 ano.** Sem tela. O registro serve para apurar incidente, a pedido seu ou do encarregado de dados.
+    **Depois da decisão:** o coordenador constrói só a limpeza e escreve quem pode pedir a consulta e como.
+  - **C. Leitura por órgão de controle.** O promotor não lê; quem lê é quem a instituição indicar (encarregado de dados, controle interno ou Corregedoria).
+    **Depois da decisão:** o coordenador leva a pergunta à pauta da Fase 0 e constrói o acesso quando houver a indicação; até lá vale a opção B.
+  - **D. Deixar tudo para o parecer do encarregado.** Fica como está até a Fase 0.
+    **Depois da decisão:** nada muda no código; a pergunta entra na pauta do encarregado.
+- **Recomendo:** B agora, com a pergunta da opção C levada ao encarregado. O registro ainda é novo e serve para apurar incidente; dar ao promotor a leitura do horário de cada assessor é passo que merece o parecer antes. O prazo de um ano é proposta: não foi conferido na tabela de temporalidade do MPSC nem em ato do CNMP.
+- **O que espera:** o texto final do termo dos participantes (já diz que o registro existe). Precisa estar decidido antes do primeiro dado real (Fase 2).
+
+### C21 · O assessor pode pedir o relatório à IA?
+- **Por que é sua:** dado e LGPD (quem manda texto de autos para fora) e dinheiro (cada pedido custa).
+- **Hoje:** o C18 reservou ao promotor só o que toca o SIG. Pedir o relatório à IA ficou aberto aos dois papéis: o pedido envia o texto dos autos ao fornecedor. Os limites contam por pessoa (20 por hora, 60 por dia), então uma promotoria com um promotor e dois assessores pode mandar o triplo. Hoje só há dados fictícios, e o motor de IA nem liga com dado real.
+- **Opções:**
+  - **A. Os dois pedem; o limite passa a ser da promotoria.** O assessor prepara a minuta inteira, com o relatório. O volume que sai fica igual ao de uma pessoa só.
+    **Depois da decisão:** o coordenador troca os limites por pessoa por limites por promotoria, com teste.
+  - **B. Só o promotor pede.** Texto de autos só sai por ato do promotor, como o envio ao SIG.
+    **Depois da decisão:** o coordenador restringe o pedido ao promotor (no serviço e na tela) e ajusta o guia.
+  - **C. Deixar como está até o contrato da Fase 3.**
+    **Depois da decisão:** nada muda; o ponto entra na pauta do contrato e do parecer (C4).
+- **Recomendo:** A. O ganho do assessor está em entregar a minuta já com o relatório; o que precisa de trava é o volume, não a pessoa.
+- **O que espera:** nada no ensaio. Precisa estar decidido antes da Fase 3.
+
 ## Decididos
 
 Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a executar" ou o que ainda falta.
@@ -63,4 +91,4 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase | A: base própria com os dados abertos do STJ | 14/11/2026 | avaliação dos arquivos em curso; volta como cartão com o plano da base |
 | C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho | A: sim, só rascunho, por ato do usuário, pela integração oficial | 16/11/2026 | limite 2 ajustado no `CLAUDE.md`; pedido em `docs/PEDIDO-TI.md`, para o titular levar à TI |
 | C17 · O piloto: quais promotorias, e quando o plano vai à Administração | A: plano aprovado com três promotorias | 16/11/2026 | roteiro, guia e termo em `docs/piloto/`; recusa de número real na planilha, na colagem e na pauta; servidor de ensaio virou o C19; itens da Fase 2 em construção, a começar pelo espaço da promotoria |
-| C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | em construção, em PR próprio com os três revisores; o limite 3 do `CLAUDE.md` muda nesse PR |
+| C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | feito na 0.6.0: espaço, papéis, registro de acessos, regra de saída e passagem do que era de cada conta; limite 3 ajustado no `CLAUDE.md`. Quem lê o registro e por quanto tempo fica virou o C20; se o assessor pede relatório à IA virou o C21 |

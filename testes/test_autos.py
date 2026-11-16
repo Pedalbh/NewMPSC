@@ -288,7 +288,8 @@ def test_limite_de_arquivos_por_processo_e_cota_de_texto(com_fila, banco, monkey
     assert "segundo.pdf não entrou: o processo já tem 1 arquivos" in com_fila.get("/processos/1").text
     monkeypatch.setattr("app.servicos.COTA_TEXTO_AUTOS", 300)   # a cota soma todos os processos do usuário
     enviar_pdf(com_fila, pdf(["Processo 0000102-00.2026.8.24.0000\nPeça."]), "terceiro.pdf", processo=2)
-    assert "terceiro.pdf não entrou: você chegou ao limite de texto guardado" in com_fila.get("/processos/2").text
+    html = com_fila.get("/processos/2").text
+    assert "terceiro.pdf não entrou: a promotoria chegou ao limite de texto guardado" in html
     assert contar(banco, ArquivoAutos) == 1
 
 
@@ -313,10 +314,11 @@ def test_servidor_ocupado_interrompe_o_envio_no_primeiro_arquivo(com_fila, vagas
     assert "Nada foi enviado: o servidor está lendo" in html
 
 
-def test_um_envio_em_leitura_por_usuario(com_fila, ana, banco):
-    with autos.vez_do_usuario(ana.id):
+def test_um_envio_em_leitura_por_promotoria(com_fila, ana, banco):
+    """Um de cada vez na promotoria: o teto de arquivos e a cota são conferidos sem corrida entre colegas."""
+    with autos.vez_do_usuario(f"promotoria {ana.promotoria_id}"):
         enviar_pdf(com_fila)
-    assert "Nada foi enviado: já há um envio seu em leitura" in com_fila.get("/processos/1").text
+    assert "Nada foi enviado: já há um envio da promotoria em leitura" in com_fila.get("/processos/1").text
     assert contar(banco, ArquivoAutos) == 0
     enviar_pdf(com_fila)   # terminada a leitura, a vez volta
     assert contar(banco, ArquivoAutos) == 1
