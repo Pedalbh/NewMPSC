@@ -13,8 +13,8 @@ Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em
 - Limite 2 do projeto (`CLAUDE.md`), pelo cartão C16: a aplicação não assina nem protocola; no SIG, só deixa rascunho, por ato do usuário e pela integração oficial.
 
 ### Segurança
-- Em servidor de dados fictícios, número de processo real não entra mais pela planilha, pela busca no SIG simulado, pela colagem nem pela pauta de audiências. Só entra número claramente fictício (na máscara, com dígito verificador inválido); número sem máscara, com espaços ou sem os zeros da frente também fica de fora, e o mesmo vale para linha da planilha com número real na classe ou no assunto. A tela diz quantas linhas ficaram de fora. O texto livre da minuta não é examinado.
-- `python -m app.cli apagar-processo EMAIL NUMERO` apaga um processo e tudo o que é dele (minuta, autos, rascunho enviado, audiências), para dado que entrou por engano. Antes a recusa só acontecia nos autos, no pedido à IA e no envio ao SIG.
+- Em servidor de dados fictícios, número de processo real não entra mais pela planilha, pela busca no SIG simulado, pela colagem nem pela pauta de audiências. Só entra número claramente fictício (na máscara, com dígito verificador inválido); número sem máscara, com espaços ou sem os zeros da frente também fica de fora, e o mesmo vale para linha da planilha com número real na classe ou no assunto. A tela diz quantas linhas ficaram de fora. O texto livre da minuta não é examinado. Antes a recusa só acontecia nos autos, no pedido à IA e no envio ao SIG.
+- `python -m app.cli apagar-processo EMAIL NUMERO` apaga um processo e tudo o que é dele (minuta, autos, rascunho enviado, audiências), para dado que entrou por engano.
 
 ## [0.5.0] - 2026-11-15
 

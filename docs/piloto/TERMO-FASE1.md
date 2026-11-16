@@ -10,7 +10,7 @@ Eu, ______________________________, participo do ensaio do NewMPSC e declaro que
 4. **O acesso é pessoal.** Não empresto a senha e não uso a conta de outra pessoa.
 5. **Nada do ensaio vale como trabalho.** Minutas e fichas feitas aqui são de teste. Não assino nem protocolo nada a partir delas.
 6. **O que eu apontar é usado para corrigir a aplicação.** Minhas anotações podem aparecer, sem meu nome, no relatório da fase.
-7. **O servidor do ensaio guarda dados meus:** nome, e-mail, cargo, promotoria e os registros de acesso. Ao fim da fase o banco do ensaio é apagado, com tudo o que fiz nele.
+7. **O servidor do ensaio guarda dados meus:** nome, e-mail, cargo e promotoria. O serviço de hospedagem registra também o endereço de rede de quem acessa. Ao fim da fase o banco do ensaio é apagado, com tudo o que fiz nele.
 8. **Posso sair quando quiser,** sem precisar explicar.
 
 Local e data: ______________________________
