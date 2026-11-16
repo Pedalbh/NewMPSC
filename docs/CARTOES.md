@@ -18,18 +18,20 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 ## Abertos
 
 ### C19 · Onde roda o ensaio da Fase 1, e a IA liga nele?
-- **Por que é sua:** contrato e dinheiro (hospedagem) e destino novo de dado, ainda que fictício.
-- **Contexto:** o C17 aprovou o piloto. A Fase 1 usa só dados fictícios, mas três promotorias precisam alcançar a aplicação, e hoje ela só roda no computador de quem desenvolve. A aplicação já recusa número de processo real na planilha, na colagem, na pauta, nos autos, no pedido à IA e no envio. Não reconhece nome nem documento: para isso existe o termo do participante.
+- **Por que é sua:** contrato e dinheiro (hospedagem) e destino novo de dado.
+- **Contexto:** o C17 aprovou o piloto. A Fase 1 usa só processos fictícios, mas três promotorias precisam alcançar a aplicação, e hoje ela só roda no computador de quem desenvolve. Dois pontos pesam em qualquer opção:
+  - **O servidor guarda dado pessoal real dos participantes:** nome, e-mail, cargo, promotoria, a senha (cifrada) e os endereços de rede nos registros do servidor e do provedor.
+  - **A recusa de dado real é parcial.** A aplicação só aceita número de processo claramente fictício. Não examina o texto da minuta e não reconhece nome, documento nem PDF digitalizado: para isso existem o termo do participante e o comando que apaga o processo.
 - **Opções:**
-  - **A. Servidor pequeno contratado só para o ensaio, sem IA.** Dados fictícios, motor de demonstração, apagado ao fim da fase.
-    **Depois da decisão:** o coordenador prepara a receita de instalação (HTTPS, convite pela linha de comando, banco apagado no fim) com parecer de segurança, e traz em cartão curto dois ou três serviços com preço e país, para você escolher e contratar.
-  - **B. O mesmo servidor, com o relatório por IA ligado sobre autos fictícios.** Os participantes veem o relatório no ensaio. O texto dos autos fictícios vai à API do Claude.
-    **Depois da decisão:** o mesmo da opção A, mais o motor de IA ligado com a sua chave (C8) e o teto de gasto no painel do fornecedor.
-  - **C. Pedir à TI um servidor institucional já para o ensaio.** Demora mais, mas adianta a hospedagem da Fase 2.
+  - **A. Servidor pequeno contratado só para o ensaio, sem IA.** Motor de demonstração; nenhum texto sai do servidor. O contrato fica em seu nome, como pessoa, não da instituição. Quem opera (console e banco) é o coordenador, com a conta que você criar.
+    **Depois da decisão:** o coordenador prepara a receita de instalação (HTTPS, convite pela linha de comando) com parecer de segurança, e traz em cartão curto dois ou três serviços com preço, país e região, e como cada um apaga cópias e snapshots no fim, para você escolher e contratar.
+  - **B. O mesmo servidor, com o relatório por IA ligado sobre autos fictícios.** Os participantes veem o relatório no ensaio. Os dados do processo e o texto de cada página dos autos vão à API do Claude (Anthropic), processados fora do Brasil, pela sua chave pessoal (C8), sem contrato institucional. Um nome real que escape num PDF vai junto. Retenção e país: a conferir nos termos do fornecedor.
+    **Depois da decisão:** o mesmo da opção A, mais o motor de IA ligado com a sua chave e o teto de gasto no painel do fornecedor; a conferência dos termos do fornecedor volta a você antes de ligar.
+  - **C. Pedir à TI um servidor institucional já para o ensaio.** Demora mais, mas o dado dos participantes fica na instituição e a hospedagem da Fase 2 se adianta.
     **Depois da decisão:** o coordenador escreve os requisitos para a TI; a Fase 1 espera a resposta dela.
-  - **D. Sem servidor.** O ensaio acontece em sessões guiadas, com a aplicação no computador de quem conduz, por compartilhamento de tela.
+  - **D. Sem servidor.** O ensaio acontece em sessões guiadas, com a aplicação no computador de quem conduz, por compartilhamento de tela. Nenhum dado de participante sai desse computador.
     **Depois da decisão:** o coordenador adapta o roteiro para sessão guiada. O portão "cada participante faz o roteiro sem ajuda" fica mais fraco e é reescrito.
-- **Recomendo:** A. Começa em dias, não envolve dado real nem IA, e o custo é o de um servidor pequeno por um mês.
+- **Recomendo:** A. Começa em dias, não envolve processo real nem IA, e o custo é o de um servidor pequeno por um mês. O preço é guardar, fora da instituição e por um mês, nome e e-mail de até nove pessoas, o que o termo passa a dizer.
 - **O que espera:** o começo da Fase 1 com os participantes. Roteiro, guia e termo já estão em `docs/piloto/`.
 - **O que você faz:** contratar o serviço escolhido (opções A e B) ou levar o pedido à TI (opção C).
 

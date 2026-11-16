@@ -23,7 +23,7 @@ Faça na ordem. Marque o que conseguiu sozinho.
 | 7 | Clicar em "Enviar ao SIG simulado" | Aparece o recibo e o processo sai da mesa |
 | 8 | Abrir a aba "SIG simulado" e achar o rascunho | O texto é o que você enviou |
 | 9 | Voltar ao processo, em Concluídos, e tirar do SIG | O processo volta para a fila |
-| 10 | Marcar uma audiência para um processo da fila | Ela aparece na pauta e no início |
+| 10 | Marcar uma audiência para um processo da fila, com data nos próximos sete dias | Ela aparece na pauta e no início |
 | 11 | Abrir a ficha da audiência | A ficha abre |
 | 12 | Baixar a minuta de um processo em .docx | O arquivo abre no Word |
 | 13 | Sair | Você volta à tela de entrada |

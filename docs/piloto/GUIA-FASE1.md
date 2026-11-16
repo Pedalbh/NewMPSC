@@ -1,6 +1,6 @@
 # NewMPSC · Guia de uma página (ensaio)
 
-**No ensaio, só dados fictícios.** A aplicação recusa número de processo real, mas não reconhece nome nem documento: o cuidado é seu.
+**No ensaio, só dados fictícios.** A aplicação recusa número de processo real quando ele chega pela fila, pela colagem, pela pauta ou pelos autos. Não examina o que você escreve na minuta e não reconhece nome nem documento: o cuidado é seu.
 
 ## O que é
 Uma mesa única: a fila de processos por prioridade, a minuta de cada um e a pauta de audiências. A aplicação sugere; você decide, assina e protocola, no SIG.
@@ -30,4 +30,4 @@ Uma mesa única: a fila de processos por prioridade, a minuta de cada um e a pau
 ## Deu problema
 - Anote o que fez, o que esperava e o que aconteceu.
 - Mande pelo canal do piloto. Resposta no mesmo dia útil.
-- Entrou dado real por engano? Avise na hora pelo canal; o coordenador apaga.
+- Entrou dado real por engano? Avise na hora pelo canal, dizendo só em qual processo da mesa. Não repita o dado na mensagem. O coordenador apaga o processo inteiro.

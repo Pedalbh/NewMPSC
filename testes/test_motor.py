@@ -520,6 +520,18 @@ def test_sem_autos_ou_com_numero_de_processo_real_o_pedido_e_recusado_sem_chamar
     assert cliente_ia.pedidos == []
 
 
+def test_numero_real_fora_da_mascara_nao_vai_ao_servico_de_ia(ana_ia, cliente_ia, banco_ia):
+    """Achado na revisão de segurança: processo com o número real sem máscara passava pela trava do pedido."""
+    from testes.test_autos import numero_real
+    p = banco_ia.get(Processo, 1)
+    p.numero = numero_real().replace("-", "").replace(".", "")
+    banco_ia.commit()
+    enviar_autos(ana_ia)
+    ana_ia.enviar("/processos/1/escrever")
+    assert "o número deste processo é real" in ana_ia.get("/processos/1").text
+    assert cliente_ia.pedidos == []
+
+
 def test_falha_do_servico_mantem_a_minuta_explica_e_some_quando_a_pessoa_segue_a_mao(ana_ia, cliente_ia, banco_ia):
     enviar_autos(ana_ia)
     cliente_ia._erro = _erro_da_api(anthropic.InternalServerError, 503)

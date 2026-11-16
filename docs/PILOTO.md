@@ -41,7 +41,7 @@ Só se passa de fase quando o portão é cumprido. Qualquer participante pode pe
 - Uma hora de treinamento por promotoria e um roteiro de tarefas: buscar a fila, corrigir uma minuta, enviar, marcar audiência.
 - Não depende de contrato com fornecedor de IA nem de hospedagem institucional, porque nenhum dado real entra. Para isso valer na prática, e não só como promessa:
   - cada participante assina um termo curto: no ensaio, só dados fictícios;
-  - a aplicação recusa número de processo real na planilha, na colagem, na pauta, nos autos, no pedido à IA e no envio ao SIG (desde a 0.5.1). Não reconhece nome nem documento;
+  - a aplicação só aceita número de processo claramente fictício na planilha, na colagem, na pauta, nos autos, no pedido à IA e no envio ao SIG (desde a 0.5.1). Não examina o texto livre da minuta e não reconhece nome nem documento;
   - o servidor de ensaio é hospedagem nova: onde fica, quem opera e se o motor de IA liga nele são decisão do titular (cartão C19). Até lá, o ensaio roda com o motor de demonstração, sem IA;
   - o banco do ensaio é apagado ao fim da fase.
 - **Portão 1:** cada participante faz o roteiro inteiro sem ajuda; os defeitos achados foram corrigidos; nenhum dado real entrou.

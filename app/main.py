@@ -290,9 +290,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     def _resumo(request: Request, res: servicos.ResultadoImportacao) -> None:
         recusa = []
         if res.recusados:
-            recusa = [("1 número de processo real não entrou" if res.recusados == 1
-                       else f"{res.recusados} números de processo reais não entraram")
-                      + ": este servidor só aceita dados fictícios."]
+            recusa = [("1 linha não entrou" if res.recusados == 1 else f"{res.recusados} linhas não entraram")
+                      + ": este servidor só aceita número de processo fictício."]
         if not res.novos and not res.atualizados:
             avisar(request, "erro", recusa + res.conferir or ["Nenhum processo encontrado."])
             return

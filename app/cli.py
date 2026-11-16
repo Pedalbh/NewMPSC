@@ -3,6 +3,7 @@
   python -m app.cli criar-usuario EMAIL "Nome"      (a senha é pedida no terminal)
   python -m app.cli semente                         (usuário e fila de demonstração, só dados fictícios)
   python -m app.cli limpar-autos                    (apaga os autos vencidos; para o agendador da hospedagem)
+  python -m app.cli apagar-processo EMAIL NUMERO    (apaga um processo da pessoa e tudo o que é dele)
 """
 import getpass
 import os
@@ -53,7 +54,8 @@ def semente(db, config, senha: str | None = None) -> str:
              ("0000108-00.2026.8.24.0000", 3, 13, "Instrução e julgamento"))
     for numero, dias, hora, tipo in pauta:
         quando = base + timedelta(days=dias)
-        servicos.marcar_audiencia(db, usuario, numero, f"{quando:%Y-%m-%d}", f"{hora:02d}:30", tipo, motor, True)
+        servicos.marcar_audiencia(db, usuario, numero, f"{quando:%Y-%m-%d}", f"{hora:02d}:30", tipo, motor,
+                                  config.dados_ficticios)
     return senha
 
 
@@ -72,6 +74,12 @@ def main(argv=None) -> None:
         elif argv == ["limpar-autos"]:
             # cartão C1: rodar por agendador (cron ou timer) na hospedagem; o servidor também limpa sozinho
             print(f"Arquivos de autos apagados por prazo: {servicos.apagar_autos_vencidos(db, datetime.now())}")
+        elif argv[:1] == ["apagar-processo"] and len(argv) == 3:
+            # dado que entrou por engano (guia do ensaio): sai o processo com minuta, autos, rascunho e audiências
+            usuario = db.scalar(select(Usuario).where(Usuario.email == argv[1].strip().lower()))
+            if usuario is None or not servicos.apagar_processo(db, usuario, argv[2].strip()):
+                raise SystemExit("nada apagado: confira o e-mail e o número, escrito como aparece na mesa")
+            print("Processo apagado, com minuta, autos, rascunho enviado e audiências.")
         elif argv == ["semente"]:
             senha = semente(db, config)
             print(f"Usuário de demonstração: {EMAIL_DEMO}\nSenha (guarde agora; não é mostrada de novo): {senha}")
