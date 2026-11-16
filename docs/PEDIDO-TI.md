@@ -25,7 +25,7 @@ Duas operações, nesta ordem. A primeira já resolve metade do trabalho manual 
 7. **Só o promotor deposita.** Na aplicação, assessor prepara e promotor envia (decisão do titular, cartão C18). O ideal é o SIG recusar depósito com credencial de assessor; se não puder, a TI fica sabendo que essa regra vive só na aplicação.
 8. **Origem à vista.** O rascunho aparece no SIG marcado como depositado pelo NewMPSC, com data, para quem assina saber de onde veio o texto.
 9. **Só com hospedagem e parecer.** Ler a fila real é dado real entrando no servidor. A integração só liga depois de hospedagem e contrato institucionais e do parecer do encarregado de dados.
-10. **Só os campos usados.** Da fila, o NewMPSC precisa de número, classe, assunto, vista, réu preso e data de entrada. Não precisa das observações da fila nem do processo.
+10. **Só os campos usados.** Da fila, o NewMPSC precisa de número do processo, número do SIG, classe, assunto, vista, réu preso e data de entrada. Não precisa das observações da fila nem do processo.
 
 ## Detalhes técnicos que ajudam
 - **Texto formatado.** Aceitar a minuta com formatação (o SIG define o formato), para a peça chegar no padrão do Manual de Redação.
