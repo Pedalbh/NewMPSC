@@ -53,7 +53,7 @@ def semente(db, config, senha: str | None = None) -> str:
              ("0000108-00.2026.8.24.0000", 3, 13, "Instrução e julgamento"))
     for numero, dias, hora, tipo in pauta:
         quando = base + timedelta(days=dias)
-        servicos.marcar_audiencia(db, usuario, numero, f"{quando:%Y-%m-%d}", f"{hora:02d}:30", tipo, motor)
+        servicos.marcar_audiencia(db, usuario, numero, f"{quando:%Y-%m-%d}", f"{hora:02d}:30", tipo, motor, True)
     return senha
 
 

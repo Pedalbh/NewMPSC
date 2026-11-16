@@ -17,43 +17,21 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 
 ## Abertos
 
-### C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho?
-- **Por que é sua:** regras do projeto. O limite 2 diz que nada aqui escreve no SIG.
-- **Hoje:** o protótipo (0.5.0) mostra o botão "Enviar ao SIG", mas só contra um SIG simulado, com dados fictícios. Nada chega ao SIG de verdade. A integração oficial não existe; a pergunta define o que se pede à TI.
+### C19 · Onde roda o ensaio da Fase 1, e a IA liga nele?
+- **Por que é sua:** contrato e dinheiro (hospedagem) e destino novo de dado, ainda que fictício.
+- **Contexto:** o C17 aprovou o piloto. A Fase 1 usa só dados fictícios, mas três promotorias precisam alcançar a aplicação, e hoje ela só roda no computador de quem desenvolve. A aplicação já recusa número de processo real na planilha, na colagem, na pauta, nos autos, no pedido à IA e no envio. Não reconhece nome nem documento: para isso existe o termo do participante.
 - **Opções:**
-  - **A. Sim, só rascunho.** Por ato do usuário, sem assinatura, só pela integração oficial. Assinar e protocolar continuam no SIG, pela pessoa.
-    **Depois da decisão:** o coordenador ajusta o texto do limite 2 no `CLAUDE.md` ("não assina nem protocola; deixa rascunho só por ato do usuário e só pela integração oficial") e leva à TI o pedido de duas operações: ler a fila e depositar rascunho. As duas com três condições: a integração age com a credencial da própria pessoa, não com conta de serviço que enxergue várias promotorias; cada depósito fica registrado no NewMPSC (quem, quando, qual processo); e a TI pode revogar o acesso. O pedido inclui aceitar texto formatado, para a peça chegar no padrão do Manual.
-  - **B. Não.** A integração oficial só lê a fila; a peça segue saindo por arquivo ou cópia.
-    **Depois da decisão:** o coordenador troca, no protótipo, "Enviar ao SIG" por "Copiar para o SIG", ajusta a apresentação e o plano do piloto, e leva à TI só o pedido de leitura.
-  - **C. Decidir depois de ouvir a TI.**
-    **Depois da decisão:** o protótipo fica como está, marcado como demonstração; o coordenador leva as duas possibilidades à TI e traz a resposta em cartão novo.
-- **Recomendo:** A. Tira a cópia manual, que é onde se perde tempo e se cola texto errado, sem tirar da pessoa a assinatura nem o protocolo.
-- **O que espera:** a pauta da conversa com a TI. Nada no código espera.
-
-### C17 · O piloto: quais promotorias, e quando o plano vai à Administração?
-- **Por que é sua:** rumo do produto e dado real.
-- **Contexto:** o plano está em `docs/PILOTO.md`: três promotorias criminais, quatro fases com portão, dado real só depois de hospedagem, parecer e contrato. A Fase 1 usa só dados fictícios e pode começar já.
-- **Opções:**
-  - **A. Aprovar o plano com três promotorias.** A sua e duas convidadas por você.
-    **Depois da decisão:** o coordenador prepara o roteiro, o guia de uma página e o termo dos participantes da Fase 1; faz a aplicação recusar número de processo real na importação e na colagem; traz em cartão novo o servidor de ensaio (onde fica, quem opera, se a IA liga nele), porque é hospedagem nova; e passa a construir os itens de produto da Fase 2 na ordem do plano.
-  - **B. Começar só pela sua promotoria.** Um piloto de um, e ampliar depois da Fase 2.
-    **Depois da decisão:** o mesmo da opção A, com um participante; o plano é reescrito com as outras duas entrando na Fase 3.
-  - **C. Ainda não.** Terminar antes a verificação de fontes (etapa 3) e só então falar em piloto.
-    **Depois da decisão:** o plano fica guardado; o coordenador segue na etapa 3.
-- **Recomendo:** A. A Fase 1 não depende de ninguém de fora e é a evidência que sustenta a conversa com a Administração.
-- **O que espera:** as Fases 0 e 1 do piloto.
-- **O que você faz:** convidar as duas promotorias; apresentar o projeto à Administração, à TI e ao encarregado de dados.
-
-### C18 · Promotor e assessor da mesma promotoria veem os mesmos processos?
-- **Por que é sua:** regras do projeto. O limite 3 diz que cada usuário vê só o que é seu.
-- **Hoje:** cada conta tem a sua mesa. Um assessor não consegue preparar a minuta que o promotor vai conferir, a não ser usando a conta dele, o que não se deve fazer.
-- **Opções:**
-  - **A. Espaço da promotoria.** Quem é da mesma promotoria vê a mesma mesa; ninguém de fora vê. Só o promotor envia ao SIG.
-    **Depois da decisão:** o coordenador ajusta o limite 3 no `CLAUDE.md` ("cada promotoria vê só o que é seu") e constrói o espaço com teste de isolamento entre promotorias e os três revisores, antes da Fase 2. Entram junto: o registro de acessos (quem abriu o quê), a regra de saída (quem deixa a promotoria perde o acesso na hora) e a passagem para a promotoria do que hoje é de cada conta (rascunhos enviados, registro de pedidos à IA).
-  - **B. Manter como está.** No piloto, só o promotor usa.
-    **Depois da decisão:** o plano do piloto passa a contar só promotores, e a medição de tempo fica restrita ao trabalho deles.
-- **Recomendo:** A. Sem isso o piloto mede um jeito de trabalhar que não é o das promotorias com assessor.
-- **O que espera:** o início da Fase 2 nas promotorias com assessor.
+  - **A. Servidor pequeno contratado só para o ensaio, sem IA.** Dados fictícios, motor de demonstração, apagado ao fim da fase.
+    **Depois da decisão:** o coordenador prepara a receita de instalação (HTTPS, convite pela linha de comando, banco apagado no fim) com parecer de segurança, e traz em cartão curto dois ou três serviços com preço e país, para você escolher e contratar.
+  - **B. O mesmo servidor, com o relatório por IA ligado sobre autos fictícios.** Os participantes veem o relatório no ensaio. O texto dos autos fictícios vai à API do Claude.
+    **Depois da decisão:** o mesmo da opção A, mais o motor de IA ligado com a sua chave (C8) e o teto de gasto no painel do fornecedor.
+  - **C. Pedir à TI um servidor institucional já para o ensaio.** Demora mais, mas adianta a hospedagem da Fase 2.
+    **Depois da decisão:** o coordenador escreve os requisitos para a TI; a Fase 1 espera a resposta dela.
+  - **D. Sem servidor.** O ensaio acontece em sessões guiadas, com a aplicação no computador de quem conduz, por compartilhamento de tela.
+    **Depois da decisão:** o coordenador adapta o roteiro para sessão guiada. O portão "cada participante faz o roteiro sem ajuda" fica mais fraco e é reescrito.
+- **Recomendo:** A. Começa em dias, não envolve dado real nem IA, e o custo é o de um servidor pequeno por um mês.
+- **O que espera:** o começo da Fase 1 com os participantes. Roteiro, guia e termo já estão em `docs/piloto/`.
+- **O que você faz:** contratar o serviço escolhido (opções A e B) ou levar o pedido à TI (opção C).
 
 ## Decididos
 
@@ -81,3 +59,6 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C13 · Por quanto tempo fica a minuta escrita pela IA a partir dos autos | A: a minuta fica | 14/11/2026 | nada a executar |
 | C14 · Para qual modelo o pedido passa quando o modelo atual declina | A: só `claude-opus-5`, pela troca do próprio serviço | 14/11/2026 | PR #11; falta confirmar com a chave (C8) que a API aceita essa reserva |
 | C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase | A: base própria com os dados abertos do STJ | 14/11/2026 | avaliação dos arquivos em curso; volta como cartão com o plano da base |
+| C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho | A: sim, só rascunho, por ato do usuário, pela integração oficial | 16/11/2026 | limite 2 ajustado no `CLAUDE.md`; pedido em `docs/PEDIDO-TI.md`, para o titular levar à TI |
+| C17 · O piloto: quais promotorias, e quando o plano vai à Administração | A: plano aprovado com três promotorias | 16/11/2026 | roteiro, guia e termo em `docs/piloto/`; recusa de número real na planilha, na colagem e na pauta; servidor de ensaio virou o C19; itens da Fase 2 em construção, a começar pelo espaço da promotoria |
+| C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | em construção, em PR próprio com os três revisores; o limite 3 do `CLAUDE.md` muda nesse PR |

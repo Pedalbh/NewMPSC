@@ -44,3 +44,10 @@ def test_remover_da_pauta(logada):
     logada.enviar("/audiencias/1/remover", pagina="/audiencias/1")
     assert "Nenhuma audiência na pauta" in logada.get("/audiencias").text
     assert logada.get("/audiencias/1").status_code == 404
+
+
+def test_servidor_de_dados_ficticios_nao_marca_audiencia_com_numero_real(logada):
+    from testes.test_autos import numero_real
+    assert marcar(logada, numero=numero_real()).status_code == 303
+    html = logada.get("/audiencias").text
+    assert "só aceita dados fictícios" in html and "Audiência marcada" not in html

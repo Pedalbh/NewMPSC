@@ -82,3 +82,20 @@ def test_conteudo_da_planilha_e_escapado_na_tela(logada):
     logada.enviar("/processos/importar", files={"planilha": ("x.csv", planilha.encode())})
     html = logada.get("/").text
     assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html
+
+
+def test_servidor_de_dados_ficticios_recusa_numero_real_na_planilha_e_na_colagem(logada):
+    """Cartão C17: no ensaio só entra dado fictício; número com dígito verificador válido fica de fora."""
+    from testes.test_autos import numero_real
+    real = numero_real()
+    planilha = f"Nº Judiciário;Entrada\n{real};01/11/2026 10:00:00\n0000101-00.2026.8.24.0000;01/11/2026 10:00:00\n"
+    logada.enviar("/processos/importar", files={"planilha": ("fila.csv", planilha.encode("cp1252"))})
+    html = logada.get("/").text
+    assert "1 processo novo" in html and "1 número de processo real não entrou" in html
+    assert numeros_na_ordem(html) == ["0000101-00.2026.8.24.0000"]
+    logada.enviar("/processos/colar", {"numeros": f"{real} e 0000102-00.2026.8.24.0000"})
+    html = logada.get("/").text
+    assert "1 processo novo" in html and "1 número de processo real não entrou" in html and real not in html
+    logada.enviar("/processos/colar", {"numeros": real})
+    html = logada.get("/").text
+    assert "só aceita dados fictícios" in html and "Nenhum processo encontrado" not in html and real not in html

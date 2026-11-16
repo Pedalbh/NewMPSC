@@ -284,12 +284,17 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     @app.post("/processos/colar", dependencies=[Depends(exigir_csrf)])
     async def colar(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
         texto = str((await request.form()).get("numeros") or "")[:20000]
-        _resumo(request, servicos.colar_numeros(db, usuario, texto, motor))
+        _resumo(request, servicos.colar_numeros(db, usuario, texto, motor, config.dados_ficticios))
         return voltar("/")
 
     def _resumo(request: Request, res: servicos.ResultadoImportacao) -> None:
+        recusa = []
+        if res.recusados:
+            recusa = [("1 número de processo real não entrou" if res.recusados == 1
+                       else f"{res.recusados} números de processo reais não entraram")
+                      + ": este servidor só aceita dados fictícios."]
         if not res.novos and not res.atualizados:
-            avisar(request, "erro", res.conferir or ["Nenhum processo encontrado."])
+            avisar(request, "erro", recusa + res.conferir or ["Nenhum processo encontrado."])
             return
         partes = []
         if res.novos == 1:
@@ -300,7 +305,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
                                                               else "com a primeira minuta pronta"))
         if res.atualizados:
             partes.append("1 já estava na fila" if res.atualizados == 1 else f"{res.atualizados} já estavam na fila")
-        avisar(request, "atencao" if res.conferir else "ok", ["; ".join(partes) + "."] + res.conferir)
+        avisar(request, "atencao" if res.conferir or recusa else "ok",
+               ["; ".join(partes) + "."] + recusa + res.conferir)
 
     @app.get("/processos/{processo_id}", response_class=HTMLResponse)
     def processo(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
@@ -518,7 +524,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         d = await request.form()
         try:
             a = servicos.marcar_audiencia(db, usuario, str(d.get("numero") or ""), str(d.get("data") or ""),
-                                          str(d.get("hora") or ""), str(d.get("tipo") or ""), motor)
+                                          str(d.get("hora") or ""), str(d.get("tipo") or ""), motor,
+                                          config.dados_ficticios)
         except (ValueError, MotorIndisponivel) as e:
             avisar(request, "erro", str(e).capitalize() + ".")
             return voltar("/audiencias")

@@ -47,6 +47,13 @@ class ResultadoImportacao:
     novos: int = 0
     atualizados: int = 0
     conferir: list[str] = field(default_factory=list)
+    recusados: int = 0   # número de processo real em servidor de dados fictícios: não entra
+
+
+def numero_real(numero: str, ficticio: bool) -> bool:
+    """Limite 1 do projeto: em servidor de dados fictícios, número com dígito verificador válido é tratado
+    como real e não entra. É um alerta, não uma garantia: número real digitado errado passa."""
+    return ficticio and dv_ok(numero)
 
 
 def _dados(processo: Processo, com_autos: bool = False) -> DadosProcesso:
@@ -228,6 +235,9 @@ def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, fic
     res = ResultadoImportacao()
     existentes = {p.numero: p for p in db.scalars(select(Processo).where(Processo.usuario_id == usuario.id))}
     for linha in fila["linhas"]:
+        if numero_real(linha["judiciario"], ficticio):
+            res.recusados += 1
+            continue
         entrada = datetime.fromisoformat(linha["entrada_iso"]) if linha["entrada_iso"] else None
         campos = dict(numero_sig=linha["sig"][:30], classe=linha["classe"][:200], assunto=linha["assunto"][:200],
                       vista=linha["vista"][:40], reu_preso=linha["reu_preso"], entrada=entrada, dv_ok=linha["dv_ok"],
@@ -251,7 +261,8 @@ def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, fic
     return res
 
 
-def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor) -> ResultadoImportacao:
+def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor,
+                  ficticio: bool) -> ResultadoImportacao:
     """Aceita números de processo colados em qualquer formato de texto (um por linha, com vírgulas, de um e-mail)."""
     res = ResultadoImportacao()
     numeros = list(dict.fromkeys(CNJ.findall(texto or "")))[:MAX_COLAGEM]
@@ -260,6 +271,9 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor) -> Re
         return res
     ja = set(db.scalars(select(Processo.numero).where(Processo.usuario_id == usuario.id)))
     for n in numeros:
+        if numero_real(n, ficticio):
+            res.recusados += 1
+            continue
         if n in ja:
             res.atualizados += 1
             continue
@@ -479,10 +493,12 @@ def remover_autos(db: Session, processo: Processo, arquivo_id: int) -> bool:
 
 
 def marcar_audiencia(db: Session, usuario: Usuario, numero: str, data: str, hora: str, tipo: str,
-                     motor: Motor) -> Audiencia:
+                     motor: Motor, ficticio: bool) -> Audiencia:
     achado = CNJ.search(numero or "")
     if not achado:
         raise ValueError("informe o número do processo no formato do eproc")
+    if numero_real(achado.group(), ficticio):
+        raise ValueError("este servidor só aceita dados fictícios, e o número deste processo é real")
     try:
         inicio = datetime.strptime(f"{data} {hora}", "%Y-%m-%d %H:%M")
     except ValueError:

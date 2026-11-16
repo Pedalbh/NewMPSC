@@ -2,6 +2,19 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.5.1] - 2026-11-16
+
+### Adicionado
+- Materiais da Fase 1 do piloto em `docs/piloto/`: roteiro do ensaio, guia de uma página e termo do participante.
+- Pedido de integração para levar à TI (`docs/PEDIDO-TI.md`): ler a fila e depositar rascunho, com as condições do projeto.
+- Cartão C19 (onde roda o ensaio da Fase 1). Cartões C16, C17 e C18 decididos: opção A nos três.
+
+### Alterado
+- Limite 2 do projeto (`CLAUDE.md`), pelo cartão C16: a aplicação não assina nem protocola; no SIG, só deixa rascunho, por ato do usuário e pela integração oficial.
+
+### Segurança
+- Em servidor de dados fictícios, número de processo real não entra mais pela planilha, pela busca no SIG simulado, pela colagem nem pela pauta de audiências. A tela diz quantos ficaram de fora. Antes a recusa só acontecia nos autos, no pedido à IA e no envio ao SIG.
+
 ## [0.5.0] - 2026-11-15
 
 ### Adicionado
