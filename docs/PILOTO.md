@@ -1,6 +1,6 @@
 # Plano do piloto: NewMPSC em promotorias criminais
 
-Proposta de 15/11/2026, para decisão do titular (cartões C16, C17 e C18 em `docs/CARTOES.md`) e, depois, para a conversa com a Administração, a TI e o encarregado de dados. Pontos jurídicos aparecem como **CONFERIR**: não foram verificados em fonte oficial. Os números de meta são propostas do coordenador, a confirmar com a medição inicial.
+Proposta de 15/11/2026, aprovada pelo titular em 16/11/2026 (cartões C16, C17 e C18: opção A nos três), para a conversa com a Administração, a TI e o encarregado de dados. Materiais da Fase 1 em `docs/piloto/`; pedido de integração em `docs/PEDIDO-TI.md`. Pontos jurídicos aparecem como **CONFERIR**: não foram verificados em fonte oficial. Os números de meta são propostas do coordenador, a confirmar com a medição inicial.
 
 ## Em uma frase
 Três promotorias criminais usam o NewMPSC por cerca de quatro meses, em quatro fases com portão entre elas, para responder com dados se a mesa única com o SIG por baixo poupa tempo sem perder segurança, e se vale ampliar.
@@ -23,7 +23,7 @@ A "segunda pessoa" que confere a amostra dos relatórios por IA é sempre da mes
 ## Quem participa
 - **Três promotorias criminais**, voluntárias. Proposta de perfil, para cobrir casos diferentes: a do titular; uma de comarca maior, com vara criminal de volume alto; uma de comarca menor, com atribuição criminal misturada a outras. A escolha é do titular (cartão C17).
 - **Em cada uma:** o promotor e quem prepara minutas com ele. O piloto começa com até 3 promotores e 6 assessores.
-- **Ponto em aberto:** hoje cada usuário só vê o que é seu. Para o assessor preparar e o promotor conferir a mesma minuta, a aplicação precisa de um espaço da promotoria. É mudança num limite do projeto (cartão C18) e condição para a Fase 2 funcionar onde há assessor.
+- **Espaço da promotoria:** hoje cada usuário só vê o que é seu. Para o assessor preparar e o promotor conferir a mesma minuta, a aplicação ganha um espaço da promotoria (cartão C18, aprovado; em construção). É condição para a Fase 2 funcionar onde há assessor.
 
 ## Fases e portões
 Só se passa de fase quando o portão é cumprido. Qualquer participante pode pedir pausa.
@@ -41,8 +41,8 @@ Só se passa de fase quando o portão é cumprido. Qualquer participante pode pe
 - Uma hora de treinamento por promotoria e um roteiro de tarefas: buscar a fila, corrigir uma minuta, enviar, marcar audiência.
 - Não depende de contrato com fornecedor de IA nem de hospedagem institucional, porque nenhum dado real entra. Para isso valer na prática, e não só como promessa:
   - cada participante assina um termo curto: no ensaio, só dados fictícios;
-  - a aplicação passa a recusar número de processo real também na importação da planilha e na colagem (hoje recusa nos autos, no pedido à IA e no envio ao SIG);
-  - o servidor de ensaio é hospedagem nova: onde fica, quem opera e se o motor de IA liga nele são decisão do titular, em cartão próprio. Até lá, o ensaio roda com o motor de demonstração, sem IA;
+  - a aplicação só aceita número de processo claramente fictício na planilha, na colagem, na pauta, nos autos, no pedido à IA e no envio ao SIG (desde a 0.5.1). Não examina o texto livre da minuta e não reconhece nome nem documento;
+  - o servidor de ensaio é hospedagem nova: onde fica, quem opera e se o motor de IA liga nele são decisão do titular (cartão C19). Até lá, o ensaio roda com o motor de demonstração, sem IA;
   - o banco do ensaio é apagado ao fim da fase.
 - **Portão 1:** cada participante faz o roteiro inteiro sem ajuda; os defeitos achados foram corrigidos; nenhum dado real entrou.
 
@@ -73,8 +73,8 @@ O protótipo mostra o destino: a fila chega com um clique e a minuta volta como 
 
 | Antes da | Item |
 | --- | --- |
-| Fase 1 | Recusa de número de processo real na importação e na colagem; termo dos participantes; servidor de ensaio decidido em cartão |
-| Fase 2 | Segundo fator no login e troca de senha pela pessoa (item 4); registro de acessos, com prazo de guarda próprio (item 2); Postgres com migrações, limpeza no lugar do `secure_delete` e cópia de segurança com prazo compatível com o C1 (itens 3 e 9); limite de tentativas de login em armazenamento comum (item 3); disco e pasta temporária cifrados, pasta da aplicação só de leitura e agendador da limpeza dos autos (item 9); conferência de dependências e versões fixadas por hash (item 10); registros de erro sem texto de processo; exclusão de processo e de usuário (item 8); prazo de guarda da minuta com dado real; espaço da promotoria, se o C18 for aprovado; revisão de segurança independente antes do primeiro dado real |
+| Fase 1 | Recusa de número de processo real na importação e na colagem (feito, 0.5.1); termo dos participantes (`docs/piloto/TERMO-FASE1.md`); servidor de ensaio decidido em cartão (C19) |
+| Fase 2 | Segundo fator no login e troca de senha pela pessoa (item 4); registro de acessos, com prazo de guarda próprio (item 2); Postgres com migrações, limpeza no lugar do `secure_delete` e cópia de segurança com prazo compatível com o C1 (itens 3 e 9); limite de tentativas de login em armazenamento comum (item 3); disco e pasta temporária cifrados, pasta da aplicação só de leitura e agendador da limpeza dos autos (item 9); conferência de dependências e versões fixadas por hash (item 10); registros de erro sem texto de processo; exclusão de processo e de usuário (item 8); prazo de guarda da minuta com dado real; espaço da promotoria (C18, aprovado); revisão de segurança independente antes do primeiro dado real |
 | Fase 3 | Contrato e parecer (C4); retirada de dados pessoais de terceiros antes do envio à IA (item 6); teto de gasto (C8); prazo de guarda do registro de pedidos à IA (item 7) |
 
 Os números de item são os da seção "O que falta para uso real" de `docs/ARQUITETURA.md`.
@@ -114,8 +114,8 @@ Volta-se só depois de a causa estar corrigida, com teste, e de o titular autori
 | Dependência de uma pessoa só | Código, decisões e testes ficam no repositório; a TI recebe a documentação na Fase 0 |
 
 ## Decisões que ainda vão virar cartão
-Além do C16, do C17 e do C18, já abertos:
-- onde fica o servidor de ensaio da Fase 1, quem opera e se a IA liga nele;
+Além do C16, do C17 e do C18, já decididos:
+- onde fica o servidor de ensaio da Fase 1, quem opera e se a IA liga nele (já aberto: C19);
 - por quanto tempo fica a minuta com dado real. O C13 ("a minuta fica") foi decidido com dado fictício;
 - se processos sigilosos e com dados de vítimas entram na Fase 2;
 - o que se apaga, e quando, ao fim do piloto.

@@ -82,3 +82,53 @@ def test_conteudo_da_planilha_e_escapado_na_tela(logada):
     logada.enviar("/processos/importar", files={"planilha": ("x.csv", planilha.encode())})
     html = logada.get("/").text
     assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html
+
+
+def test_servidor_de_dados_ficticios_recusa_numero_real_na_planilha_e_na_colagem(logada):
+    """Cartão C17: no ensaio só entra dado fictício; número com dígito verificador válido fica de fora."""
+    from testes.test_autos import numero_real
+    real = numero_real()
+    planilha = f"Nº Judiciário;Entrada\n{real};01/11/2026 10:00:00\n0000101-00.2026.8.24.0000;01/11/2026 10:00:00\n"
+    logada.enviar("/processos/importar", files={"planilha": ("fila.csv", planilha.encode("cp1252"))})
+    html = logada.get("/").text
+    assert "1 processo novo" in html and "1 linha não entrou" in html
+    assert numeros_na_ordem(html) == ["0000101-00.2026.8.24.0000"]
+    # achado na revisão: o número real fora da máscara entrava calado, e depois passava pelas outras travas
+    solto = real.replace("-", "").replace(".", "")
+    variantes = [solto, real.replace("-", " - "), real.replace(".", "/"), solto.lstrip("0")]
+    planilha = "Nº Judiciário;Entrada;Classe TJ\n" + "".join(f"{v};01/11/2026 10:00:00;Ação\n" for v in variantes)
+    planilha += f"0000102-00.2026.8.24.0000;01/11/2026 10:00:00;Apenso ao {solto}\n"   # número real na classe
+    logada.enviar("/processos/importar", files={"planilha": ("fila.csv", planilha.encode("cp1252"))})
+    html = logada.get("/").text
+    assert "5 linhas não entraram" in html and "só aceita número de processo fictício" in html
+    assert numeros_na_ordem(html) == ["0000101-00.2026.8.24.0000"] and solto not in html
+    logada.enviar("/processos/colar", {"numeros": f"{real} e 0000102-00.2026.8.24.0000"})
+    html = logada.get("/").text
+    assert "1 processo novo" in html and "1 linha não entrou" in html and real not in html
+    logada.enviar("/processos/colar", {"numeros": real})
+    html = logada.get("/").text
+    assert "só aceita número de processo fictício" in html and real not in html
+    assert "Nenhum processo encontrado" not in html
+
+
+def test_apagar_processo_pela_linha_de_comando_leva_tudo_e_so_o_da_pessoa(logada, banco, ana, bruno):
+    """Parecer de segurança (0.5.1): o guia do ensaio promete apagar dado que entrou por engano."""
+    from app import servicos
+    from app.modelos import ArquivoAutos, Audiencia, Minuta, PaginaAutos, Processo
+    from app.portas import criar_motor
+    from testes.conftest import RAIZ
+    numero = "0000101-00.2026.8.24.0000"
+    logada.importar_fila()
+    autos = (RAIZ / "dados_ficticios" / "autos-ficticios.pdf").read_bytes()
+    logada.enviar("/processos/1/autos", files={"autos": ("autos.pdf", autos)}, pagina="/processos/1")
+    logada.enviar("/audiencias", {"numero": numero, "data": "2026-11-16", "hora": "14:30",
+                                  "tipo": "Instrução e julgamento"}, pagina="/audiencias")
+    servicos.colar_numeros(banco, bruno, numero, criar_motor("demo"), True)
+    assert banco.query(PaginaAutos).count() > 0
+    assert not servicos.apagar_processo(banco, ana, "0000999-00.2026.8.24.0000")
+    assert servicos.apagar_processo(banco, ana, numero)
+    assert banco.query(Processo).filter_by(usuario_id=ana.id, numero=numero).count() == 0
+    assert banco.query(Processo).filter_by(usuario_id=bruno.id, numero=numero).count() == 1   # o de Bruno fica
+    assert banco.query(PaginaAutos).count() == 0 and banco.query(ArquivoAutos).count() == 0
+    assert banco.query(Audiencia).count() == 0 and banco.query(Minuta).count() == 9   # 8 de Ana, 1 de Bruno
+    assert numero not in logada.get("/").text

@@ -4,7 +4,7 @@ Aplicação web do promotor (processos, minutas, audiências). Projeto **separad
 
 ## Limites
 1. **Só dados fictícios** no repositório, nos testes e no servidor de teste: número de processo com dígito verificador inválido (`-00`), nomes genéricos. Dado real só depois de hospedagem e contrato institucionais (decisão do titular).
-2. **Humano no fim da linha:** a aplicação sugere; quem decide, assina e protocola é o usuário. Nada aqui escreve no SIG nem no eproc.
+2. **Humano no fim da linha:** a aplicação sugere; quem decide, assina e protocola é o usuário. A aplicação não assina nem protocola. No SIG, só deixa rascunho, por ato do usuário e pela integração oficial (cartão C16; ela ainda não existe). Fora isso, nada aqui escreve no SIG nem no eproc.
 3. **Cada usuário vê só o que é seu.** Toda consulta filtra pelo usuário; mudança nisso exige teste de isolamento.
 4. **Nenhum segredo no código.** Sem cadastro aberto: usuário entra por convite (`app.cli`).
 5. Conteúdo jurídico gerado por IA só entra com verificação em fonte oficial; o motor de demonstração não traz conteúdo jurídico.

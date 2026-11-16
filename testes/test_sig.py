@@ -10,7 +10,7 @@ from app.config import Config, carregar
 from app.main import criar_app
 from app.modelos import EntregaSig, Processo, Usuario
 from app.nucleo.tabela import dv_ok
-from app.portas import ConexaoPlanilha, ConexaoSigSimulado, SigIndisponivel, criar_conexao
+from app.portas import ConexaoPlanilha, ConexaoSigSimulado, SigIndisponivel, criar_conexao, criar_motor
 from testes.conftest import AGORA, SENHA, Cliente
 from testes.test_processos import numeros_na_ordem
 
@@ -167,7 +167,8 @@ def test_a_porta_recebe_quem_pede_e_quem_envia():
 
 def test_numero_real_nao_e_enviado_em_servidor_de_dados_ficticios(logada, banco):
     real = next(n for n in (f"0000301-{dv:02d}.2026.8.24.0000" for dv in range(100)) if dv_ok(n))
-    logada.enviar("/processos/colar", {"numeros": real})
+    # a colagem já recusa número real; este é o caso do processo que entrou antes da recusa existir
+    servicos.colar_numeros(banco, banco.query(Usuario).one(), real, criar_motor("demo"), False)
     r = logada.enviar("/processos/1/entregar")
     assert r.status_code == 409 and "só aceita dados fictícios" in r.text
     assert banco.query(EntregaSig).count() == 0 and banco.get(Processo, 1).situacao == "a_fazer"

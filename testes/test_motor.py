@@ -15,7 +15,7 @@ from sqlalchemy import select
 from app import motor_claude, servicos
 from app.config import Config, carregar
 from app.main import criar_app
-from app.modelos import PedidoIA, Processo, TarefaMinuta
+from app.modelos import PedidoIA, Processo, TarefaMinuta, Usuario
 from app.motor_claude import MAX_CARACTERES, SISTEMA, MotorClaude
 from app.portas import DadosProcesso, MotorIndisponivel, PaginaDosAutos, criar_motor
 from testes.conftest import AGORA, SENHA, Cliente
@@ -506,15 +506,29 @@ def test_pontos_a_enfrentar_ficam_na_tela_e_nao_entram_no_arquivo(ana_ia):
     assert "autoria" not in xml and "[ESCREVER: fundamentação]" in xml
 
 
-def test_sem_autos_ou_com_numero_de_processo_real_o_pedido_e_recusado_sem_chamar_o_servico(ana_ia, cliente_ia):
-    """Defeito achado na revisão: número real colado na mesa seguia para o serviço de IA em servidor fictício."""
+def test_sem_autos_ou_com_numero_de_processo_real_o_pedido_e_recusado_sem_chamar_o_servico(ana_ia, cliente_ia,
+                                                                                         banco_ia, app_ia):
+    """Defeito achado na revisão: número real colado na mesa seguia para o serviço de IA em servidor fictício.
+    Hoje a colagem já recusa; a barreira no pedido continua valendo para processo que entrou antes."""
     from testes.test_autos import numero_real
     ana_ia.enviar("/processos/1/escrever")
     assert "O relatório não foi pedido: envie antes os autos em PDF" in ana_ia.get("/processos/1").text
-    ana_ia.enviar("/processos/colar", {"numeros": numero_real()})
+    servicos.colar_numeros(banco_ia, banco_ia.query(Usuario).one(), numero_real(), app_ia.state.motor, False)
     enviar_autos(ana_ia, processo=10)
     ana_ia.enviar("/processos/10/escrever")
     assert "o número deste processo é real" in ana_ia.get("/processos/10").text
+    assert cliente_ia.pedidos == []
+
+
+def test_numero_real_fora_da_mascara_nao_vai_ao_servico_de_ia(ana_ia, cliente_ia, banco_ia):
+    """Achado na revisão de segurança: processo com o número real sem máscara passava pela trava do pedido."""
+    from testes.test_autos import numero_real
+    p = banco_ia.get(Processo, 1)
+    p.numero = numero_real().replace("-", "").replace(".", "")
+    banco_ia.commit()
+    enviar_autos(ana_ia)
+    ana_ia.enviar("/processos/1/escrever")
+    assert "o número deste processo é real" in ana_ia.get("/processos/1").text
     assert cliente_ia.pedidos == []
 
 

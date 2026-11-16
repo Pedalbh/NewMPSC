@@ -47,6 +47,19 @@ class ResultadoImportacao:
     novos: int = 0
     atualizados: int = 0
     conferir: list[str] = field(default_factory=list)
+    recusados: int = 0   # em servidor de dados fictícios: número que não é claramente fictício não entra
+
+
+def numero_real(numero: str, ficticio: bool) -> bool:
+    """Limite 1 do projeto: em servidor de dados fictícios só vale o número claramente fictício, isto é, na
+    máscara exata e com dígito verificador inválido. Todo o resto é tratado como real: dígito válido, número
+    sem máscara, com espaços, sem os zeros da frente (o dígito de um número fora da máscara não é conferível).
+    É um alerta, não uma garantia: número real digitado errado passa, e o texto da minuta não é examinado."""
+    return ficticio and not (CNJ.fullmatch(numero or "") and not dv_ok(numero))
+
+
+def _traz_numero_real(texto: str) -> bool:
+    return any(dv_ok(n) for n in numeros_no_texto(texto))
 
 
 def _dados(processo: Processo, com_autos: bool = False) -> DadosProcesso:
@@ -97,7 +110,7 @@ def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
     if processo.situacao == "concluido":   # a limpeza do prazo de guarda (C1) não corre junto com uma escrita
         raise EscritaRecusada("o processo está concluído; devolva-o à fila para pedir o relatório")
     # Limite 1 do projeto: em servidor de dados fictícios, processo com número real não vai ao serviço de IA.
-    if ficticio and dv_ok(processo.numero):
+    if numero_real(processo.numero, ficticio):
         raise EscritaRecusada("este servidor só aceita dados fictícios, e o número deste processo é real")
     if not any(p.texto for a in processo.autos for p in a.paginas):
         raise EscritaRecusada("envie antes os autos em PDF, com texto para ler")
@@ -228,6 +241,11 @@ def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, fic
     res = ResultadoImportacao()
     existentes = {p.numero: p for p in db.scalars(select(Processo).where(Processo.usuario_id == usuario.id))}
     for linha in fila["linhas"]:
+        # classe e assunto são texto livre da planilha e seguem para o motor: também não levam número real
+        if numero_real(linha["judiciario"], ficticio) or (
+                ficticio and _traz_numero_real(f'{linha["classe"]} {linha["assunto"]} {linha["sig"]}')):
+            res.recusados += 1
+            continue
         entrada = datetime.fromisoformat(linha["entrada_iso"]) if linha["entrada_iso"] else None
         campos = dict(numero_sig=linha["sig"][:30], classe=linha["classe"][:200], assunto=linha["assunto"][:200],
                       vista=linha["vista"][:40], reu_preso=linha["reu_preso"], entrada=entrada, dv_ok=linha["dv_ok"],
@@ -251,7 +269,8 @@ def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, fic
     return res
 
 
-def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor) -> ResultadoImportacao:
+def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor,
+                  ficticio: bool) -> ResultadoImportacao:
     """Aceita números de processo colados em qualquer formato de texto (um por linha, com vírgulas, de um e-mail)."""
     res = ResultadoImportacao()
     numeros = list(dict.fromkeys(CNJ.findall(texto or "")))[:MAX_COLAGEM]
@@ -260,6 +279,9 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor) -> Re
         return res
     ja = set(db.scalars(select(Processo.numero).where(Processo.usuario_id == usuario.id)))
     for n in numeros:
+        if numero_real(n, ficticio):
+            res.recusados += 1
+            continue
         if n in ja:
             res.atualizados += 1
             continue
@@ -269,6 +291,23 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor) -> Re
         res.novos += 1
     db.commit()
     return res
+
+
+def apagar_processo(db: Session, usuario: Usuario, numero: str) -> bool:
+    """Apaga um processo do usuário e tudo o que é dele: minuta, autos, rascunho enviado, escrita, registro de
+    pedidos à IA e audiências com o mesmo número. Para dado que entrou por engano; só pela linha de comando."""
+    processo = db.scalar(select(Processo).where(Processo.usuario_id == usuario.id, Processo.numero == numero))
+    audiencias = db.scalars(select(Audiencia).where(Audiencia.usuario_id == usuario.id,
+                                                    Audiencia.numero == numero)).all()
+    if processo is None and not audiencias:
+        return False
+    for a in audiencias:
+        db.delete(a)
+    if processo is not None:
+        db.execute(delete(PedidoIA).where(PedidoIA.processo_id == processo.id))
+        db.delete(processo)
+    db.commit()
+    return True
 
 
 def fila(db: Session, usuario: Usuario, situacao: str = "a_fazer") -> list[Processo]:
@@ -334,7 +373,7 @@ def entregar_ao_sig(db: Session, processo: Processo, usuario: Usuario, conexao: 
     if escrevendo(processo):
         raise ValueError("a minuta está sendo escrita; espere terminar")
     # Limite 1 do projeto, como nos autos e no pedido à IA: em servidor de dados fictícios, número real não sai.
-    if ficticio and dv_ok(processo.numero):
+    if numero_real(processo.numero, ficticio):
         raise ValueError("este servidor só aceita dados fictícios, e o número deste processo é real")
     blocos = [dict(b) for b in processo.minuta.blocos]   # cópia: o rascunho não muda se a minuta mudar depois
     recibo = conexao.entregar_rascunho(usuario.email, processo.numero, documento.texto_simples(blocos))
@@ -479,10 +518,12 @@ def remover_autos(db: Session, processo: Processo, arquivo_id: int) -> bool:
 
 
 def marcar_audiencia(db: Session, usuario: Usuario, numero: str, data: str, hora: str, tipo: str,
-                     motor: Motor) -> Audiencia:
+                     motor: Motor, ficticio: bool) -> Audiencia:
     achado = CNJ.search(numero or "")
     if not achado:
         raise ValueError("informe o número do processo no formato do eproc")
+    if numero_real(achado.group(), ficticio):
+        raise ValueError("este servidor só aceita dados fictícios, e o número deste processo é real")
     try:
         inicio = datetime.strptime(f"{data} {hora}", "%Y-%m-%d %H:%M")
     except ValueError:
