@@ -35,6 +35,19 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **O que espera:** o começo da Fase 1 com os participantes. Roteiro, guia e termo já estão em `docs/piloto/`.
 - **O que você faz:** contratar o serviço escolhido (opções A e B) ou levar o pedido à TI (opção C).
 
+### C20 · Registro de acessos: quem pode ler, e por quanto tempo fica?
+- **Por que é sua:** dado e LGPD (prazo de guarda) e regras do projeto.
+- **Hoje:** desde a 0.6.0 a aplicação anota quem abriu, editou, baixou ou enviou cada processo, e quando. Não guarda conteúdo. Ninguém lê pela tela: só quem administra o servidor, pela linha de comando. As linhas não têm prazo: ficam para sempre. O registro diz o que cada pessoa fez e a que horas, então também é dado pessoal de quem trabalha.
+- **Opções:**
+  - **A. O promotor lê o da sua promotoria; guarda de 1 ano.** Uma tela simples, só para o promotor. Linhas com mais de um ano são apagadas sozinhas.
+    **Depois da decisão:** o coordenador constrói a tela e a limpeza, com teste de isolamento e os três revisores, e põe o prazo no termo dos participantes.
+  - **B. Só quem administra lê; guarda de 1 ano.** Sem tela. O registro serve para apurar incidente, a pedido.
+    **Depois da decisão:** o coordenador constrói só a limpeza e escreve quem pode pedir a consulta.
+  - **C. Deixar o prazo para o encarregado de dados.** Fica como está até o parecer da Fase 0.
+    **Depois da decisão:** nada muda no código; a pergunta entra na pauta do encarregado.
+- **Recomendo:** A. O promotor responde pela mesa e precisa ver quem mexeu nela; um ano cobre o piloto inteiro com folga. O prazo é proposta: não foi conferido em norma.
+- **O que espera:** nada no ensaio. Precisa estar decidido antes do primeiro dado real (Fase 2).
+
 ## Decididos
 
 Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a executar" ou o que ainda falta.
@@ -63,4 +76,4 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C15 · De onde a aplicação tira a jurisprudência, no lugar do JuriBase | A: base própria com os dados abertos do STJ | 14/11/2026 | avaliação dos arquivos em curso; volta como cartão com o plano da base |
 | C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho | A: sim, só rascunho, por ato do usuário, pela integração oficial | 16/11/2026 | limite 2 ajustado no `CLAUDE.md`; pedido em `docs/PEDIDO-TI.md`, para o titular levar à TI |
 | C17 · O piloto: quais promotorias, e quando o plano vai à Administração | A: plano aprovado com três promotorias | 16/11/2026 | roteiro, guia e termo em `docs/piloto/`; recusa de número real na planilha, na colagem e na pauta; servidor de ensaio virou o C19; itens da Fase 2 em construção, a começar pelo espaço da promotoria |
-| C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | em construção, em PR próprio com os três revisores; o limite 3 do `CLAUDE.md` muda nesse PR |
+| C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | feito na 0.6.0: espaço, papéis, registro de acessos, regra de saída e passagem do que era de cada conta; limite 3 ajustado no `CLAUDE.md`. Quem lê o registro e por quanto tempo fica virou o C20 |

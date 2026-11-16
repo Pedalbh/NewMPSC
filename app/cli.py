@@ -1,6 +1,11 @@
 """Tarefas de administração. Não há cadastro aberto: cada pessoa é convidada uma a uma.
 
-  python -m app.cli criar-usuario EMAIL "Nome"      (a senha é pedida no terminal)
+  python -m app.cli criar-usuario EMAIL "Nome" "Promotoria" [promotor|assessor]
+                                                    (a senha é pedida no terminal; a promotoria é criada se não existir)
+  python -m app.cli mover-usuario EMAIL "Promotoria" [promotor|assessor]
+                                                    (passa a ver só a mesa da nova promotoria, na hora)
+  python -m app.cli desligar-usuario EMAIL          (sai da promotoria e perde o acesso na hora)
+  python -m app.cli acessos "Promotoria"            (registro de acessos: quem fez o quê, e quando)
   python -m app.cli semente                         (usuário e fila de demonstração, só dados fictícios)
   python -m app.cli limpar-autos                    (apaga os autos vencidos; para o agendador da hospedagem)
   python -m app.cli apagar-processo EMAIL NUMERO    (apaga um processo da pessoa e tudo o que é dele)
@@ -16,7 +21,7 @@ from sqlalchemy import select
 
 from . import autos, servicos
 from .config import carregar
-from .modelos import Usuario, criar_banco
+from .modelos import PAPEIS, Promotoria, Usuario, criar_banco
 from .portas import ConexaoPlanilha, criar_motor
 from .seguranca import gerar_hash
 
@@ -25,12 +30,62 @@ FILA_FICTICIA = Path(__file__).parent.parent / "dados_ficticios" / "fila-sig-fic
 AUTOS_FICTICIOS = FILA_FICTICIA.with_name("autos-ficticios.pdf")
 
 
-def criar_usuario(db, email: str, nome: str, senha: str, cargo: str = "", promotoria: str = "") -> Usuario:
+def _promotoria(db, nome: str) -> Promotoria:
+    """A promotoria com este nome exato; criada se não existir. Juntar pessoas é sempre ato de quem administra."""
+    nome = " ".join(nome.split())[:160]
+    if not nome:
+        raise SystemExit("informe o nome da promotoria")
+    promotoria = db.scalar(select(Promotoria).where(Promotoria.nome == nome))
+    if promotoria is None:
+        promotoria = Promotoria(nome=nome)
+        db.add(promotoria)
+        db.flush()
+    return promotoria
+
+
+def _papel(papel: str) -> str:
+    if papel not in PAPEIS:
+        raise SystemExit(f"papel desconhecido: use {' ou '.join(PAPEIS)}")
+    return papel
+
+
+def _usuario(db, email: str) -> Usuario:
+    usuario = db.scalar(select(Usuario).where(Usuario.email == email.strip().lower()))
+    if usuario is None:
+        raise SystemExit("não há usuário com esse e-mail")
+    return usuario
+
+
+def criar_usuario(db, email: str, nome: str, senha: str, cargo: str = "", promotoria: str = "",
+                  papel: str = "promotor") -> Usuario:
+    """Sem `promotoria`, a pessoa ganha uma mesa só dela (nunca entra na de alguém por omissão)."""
     email = email.strip().lower()
     if db.scalar(select(Usuario).where(Usuario.email == email)):
         raise SystemExit(f"já existe usuário com o e-mail {email}")
-    usuario = Usuario(email=email, nome=nome, cargo=cargo, promotoria=promotoria, senha_hash=gerar_hash(senha))
+    espaco = _promotoria(db, promotoria or f"Mesa de {email}")
+    usuario = Usuario(email=email, nome=nome, cargo=cargo, promotoria=espaco.nome, espaco=espaco,
+                      papel=_papel(papel), senha_hash=gerar_hash(senha))
     db.add(usuario)
+    db.commit()
+    return usuario
+
+
+def mover_usuario(db, email: str, promotoria: str, papel: str | None = None) -> Usuario:
+    """Passa a pessoa para outra promotoria. Vale na requisição seguinte: ela deixa de ver a mesa antiga, e o
+    que ela trouxe ou escreveu fica com a promotoria de onde saiu."""
+    usuario, espaco = _usuario(db, email), _promotoria(db, promotoria)
+    usuario.espaco, usuario.promotoria = espaco, espaco.nome
+    if papel is not None:
+        usuario.papel = _papel(papel)
+    db.commit()
+    return usuario
+
+
+def desligar_usuario(db, email: str) -> Usuario:
+    """Tira a pessoa da promotoria. Sem promotoria a conta não entra, e a sessão aberta cai na requisição
+    seguinte. O trabalho dela fica com a promotoria."""
+    usuario = _usuario(db, email)
+    usuario.espaco, usuario.promotoria = None, ""
     db.commit()
     return usuario
 
@@ -67,10 +122,25 @@ def main(argv=None) -> None:
     config = carregar()
     _, Sessao = criar_banco(config.banco_url, config.chave_impressao)
     with Sessao() as db:
-        if argv[:1] == ["criar-usuario"] and len(argv) == 3:
+        if argv[:1] == ["criar-usuario"] and len(argv) in (4, 5):
+            papel = _papel(argv[4] if len(argv) == 5 else "promotor")
             senha = getpass.getpass("Senha (12 caracteres ou mais): ")
-            criar_usuario(db, argv[1], argv[2], senha)
-            print("Usuário criado.")
+            usuario = criar_usuario(db, argv[1], argv[2], senha, promotoria=argv[3], papel=papel)
+            print(f"Usuário criado em {usuario.espaco.nome}, como {usuario.papel}.")
+        elif argv[:1] == ["mover-usuario"] and len(argv) in (3, 4):
+            usuario = mover_usuario(db, argv[1], argv[2], argv[3] if len(argv) == 4 else None)
+            print(f"{usuario.email} agora está em {usuario.espaco.nome}, como {usuario.papel}.")
+        elif argv[:1] == ["desligar-usuario"] and len(argv) == 2:
+            desligar_usuario(db, argv[1])
+            print("Usuário desligado: não entra mais, e a sessão aberta cai no próximo clique.")
+        elif argv[:1] == ["acessos"] and len(argv) == 2:
+            espaco = db.scalar(select(Promotoria).where(Promotoria.nome == " ".join(argv[1].split())))
+            if espaco is None:
+                raise SystemExit("não há promotoria com esse nome")
+            emails = dict(db.execute(select(Usuario.id, Usuario.email)).all())
+            for a in servicos.acessos_da_promotoria(db, espaco.id):
+                processo = f"processo {a.processo_id}" if a.processo_id else "-"
+                print(f"{a.quando:%d/%m/%Y %H:%M}  {emails.get(a.usuario_id, a.usuario_id)}  {a.acao}  {processo}")
         elif argv == ["limpar-autos"]:
             # cartão C1: rodar por agendador (cron ou timer) na hospedagem; o servidor também limpa sozinho
             print(f"Arquivos de autos apagados por prazo: {servicos.apagar_autos_vencidos(db, datetime.now())}")

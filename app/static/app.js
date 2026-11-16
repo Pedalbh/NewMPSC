@@ -93,28 +93,35 @@
   };
   destacar();
   if (folha && estado) {
-    let espera = null, pendente = false, salvando = false;
+    let espera = null, pendente = false, salvando = false, conflito = false;
+    let versao = Number(folha.dataset.versao || 0);   // a versão que esta tela carregou: o servidor confere ao salvar
     const marcar = (texto, classe) => { estado.textContent = texto; estado.className = "selo empurra " + (classe || ""); };
     const blocos = () => [...folha.querySelectorAll(".b")]
       .map((p) => ({ texto: p.innerText.replace(/ /g, " ").trim(), estilo: p.dataset.estilo }))
       .filter((b) => b.texto);
 
     const salvar = async () => {
+      if (conflito) return;   // outra pessoa salvou por cima: nada daqui é gravado até recarregar
       if (salvando) { pendente = true; return; }
       salvando = true; pendente = false; marcar("Salvando…", "andamento");
       try {
         const r = await fetch(folha.dataset.salvar, {
           method: "PUT", headers: { "Content-Type": "application/json", "X-CSRF-Token": csrf },
-          body: JSON.stringify({ blocos: blocos() }),
+          body: JSON.stringify({ blocos: blocos(), versao }),
         });
         const d = await r.json().catch(() => ({}));
-        if (r.ok) marcar("Salva às " + d.salva_em, "ok");
-        else marcar(d.erro || "Não salvou", "erro");
+        if (r.ok) { versao = d.versao; marcar("Salva às " + d.salva_em, "ok"); }
+        else if (r.status === 409) {
+          conflito = true; pendente = false; marcar("Não salvou", "erro");
+          const aviso = document.getElementById("conflito");
+          aviso.hidden = false; aviso.focus();
+        } else marcar(d.erro || "Não salvou", "erro");
       } catch { marcar("Sem conexão: não salvou", "erro"); }
       salvando = false;
       if (pendente) salvar();
     };
     const agendar = () => {
+      if (conflito) return;
       marcar("Alterada", "atencao"); clearTimeout(espera); espera = setTimeout(salvar, 900); destacar(); contar();
     };
 

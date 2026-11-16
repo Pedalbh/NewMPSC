@@ -1,4 +1,5 @@
-"""Regras de trabalho: fila de processos, minutas e pauta. Toda consulta filtra pelo usuário."""
+"""Regras de trabalho: fila de processos, minutas e pauta. Toda consulta filtra pela promotoria de quem pede
+(limite 3, cartão C18): quem é da mesma promotoria vê a mesma mesa; ninguém de fora vê."""
 import logging
 import re
 import secrets
@@ -7,13 +8,24 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from .autos import Leitura, impressao, limpar
-from .modelos import ArquivoAutos, Audiencia, EntregaSig, Minuta, PaginaAutos, PedidoIA, Processo, TarefaMinuta, Usuario
+from .modelos import (
+    Acesso,
+    ArquivoAutos,
+    Audiencia,
+    EntregaSig,
+    Minuta,
+    PaginaAutos,
+    PedidoIA,
+    Processo,
+    TarefaMinuta,
+    Usuario,
+)
 from .nucleo import documento
 from .nucleo.tabela import dv_ok
 from .portas import Conexao, DadosProcesso, Motor, MotorIndisponivel, PaginaDosAutos, esqueleto
@@ -28,7 +40,7 @@ PRAZO_DA_ESCRITA = timedelta(minutes=15)      # depois disso a escrita é dada c
 ORIGEM_EM_BRANCO, ORIGEM_IA = "em branco", "IA, a conferir"
 _registro = logging.getLogger("newmpsc")
 _tranca_escrita = threading.Lock()   # um servidor só: pedidos simultâneos de escrita entram um de cada vez
-COTA_TEXTO_AUTOS = 200_000_000   # caracteres de autos guardados por usuário
+COTA_TEXTO_AUTOS = 200_000_000   # caracteres de autos guardados por promotoria
 GUARDA_DEPOIS_DE_CONCLUIDO = timedelta(days=30)   # cartão C1: o texto dos autos some sozinho depois disso
 # o número como sai de um PDF: com ou sem máscara, com espaços ou quebra de linha no meio
 _CNJ_SOLTO = re.compile(r"(?<!\d)(\d{7})[\s.\-/]{0,3}(\d{2})[\s.\-/]{0,3}(\d{4})[\s.\-/]{0,3}(\d)[\s.\-/]{0,3}(\d{2})"
@@ -84,6 +96,26 @@ class EscritaRecusada(ValueError):
     """A mensagem é a orientação mostrada ao usuário."""
 
 
+class SoPromotor(ValueError):
+    """Ato que o assessor não pratica: o que toca o SIG é do promotor (cartão C18)."""
+
+
+class MinutaMudou(ValueError):
+    """Outra pessoa salvou a minuta depois que esta tela a carregou."""
+
+
+def registrar_acesso(db: Session, usuario: Usuario, acao: str, processo: Processo | None = None) -> None:
+    """Uma linha no registro de acessos: quem, o quê, em qual processo, quando. Sem conteúdo."""
+    db.add(Acesso(usuario_id=usuario.id, promotoria_id=usuario.promotoria_id, acao=acao[:30],
+                  processo_id=processo.id if processo is not None else None))
+    db.commit()
+
+
+def acessos_da_promotoria(db: Session, promotoria_id: int, limite: int = 200) -> list[Acesso]:
+    return list(db.scalars(select(Acesso).where(Acesso.promotoria_id == promotoria_id)
+                           .order_by(Acesso.quando.desc(), Acesso.id.desc()).limit(limite)))
+
+
 def escrevendo(processo: Processo) -> bool:
     return bool(processo.tarefa and processo.tarefa.estado == "escrevendo")
 
@@ -101,10 +133,12 @@ def conferir_escrita(db: Session, processo: Processo) -> None:
         db.commit()
 
 
-def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
+def pedir_escrita(db: Session, processo: Processo, usuario: Usuario, motor: Motor, ficticio: bool,
                   confirmado: bool = False) -> TarefaMinuta:
-    """Marca que a minuta deste processo está sendo escrita pelo motor e registra o pedido.
-    Levanta `EscritaRecusada` com a orientação."""
+    """Marca que a minuta deste processo está sendo escrita pelo motor e registra o pedido em nome de quem pediu.
+    Os limites são por pessoa. Levanta `EscritaRecusada` com a orientação."""
+    if processo.promotoria_id != usuario.promotoria_id:   # a rota já filtra; aqui é a segunda barreira
+        raise EscritaRecusada("processo de outra promotoria")
     if not motor.usa_autos:
         raise EscritaRecusada("o motor em uso não escreve a partir dos autos")
     if processo.situacao == "concluido":   # a limpeza do prazo de guarda (C1) não corre junto com uma escrita
@@ -125,11 +159,13 @@ def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
         if escrevendo(processo):
             raise EscritaRecusada("a minuta deste processo já está sendo escrita")
         em_curso = select(func.count()).select_from(TarefaMinuta).where(TarefaMinuta.estado == "escrevendo")
-        if db.scalar(em_curso.join(Processo).where(Processo.usuario_id == processo.usuario_id)):
+        meus_em_curso = select(func.count()).select_from(PedidoIA).where(
+            PedidoIA.usuario_id == usuario.id, PedidoIA.resultado == "em curso")
+        if db.scalar(meus_em_curso):
             raise EscritaRecusada("já há uma minuta sua sendo escrita; espere terminar")
         if db.scalar(em_curso) >= ESCRITAS_AO_MESMO_TEMPO:
             raise EscritaRecusada("o servidor está escrevendo outras minutas; tente de novo em instantes")
-        feitos = select(func.count()).select_from(PedidoIA).where(PedidoIA.usuario_id == processo.usuario_id)
+        feitos = select(func.count()).select_from(PedidoIA).where(PedidoIA.usuario_id == usuario.id)
         if db.scalar(feitos.where(PedidoIA.feito_em > agora - timedelta(hours=1))) >= ESCRITAS_POR_HORA:
             raise EscritaRecusada("você chegou ao limite de pedidos por hora; tente mais tarde")
         if db.scalar(feitos.where(PedidoIA.feito_em > agora - timedelta(days=1))) >= ESCRITAS_POR_DIA:
@@ -139,7 +175,7 @@ def pedir_escrita(db: Session, processo: Processo, motor: Motor, ficticio: bool,
             db.flush()
         chave = secrets.token_hex(8)
         processo.tarefa = TarefaMinuta(chave=chave)
-        db.add(PedidoIA(usuario_id=processo.usuario_id, processo_id=processo.id, chave=chave))
+        db.add(PedidoIA(usuario_id=usuario.id, processo_id=processo.id, chave=chave))
         try:
             db.commit()
         except IntegrityError:   # dois pedidos para o mesmo processo ao mesmo tempo, em servidores diferentes
@@ -226,20 +262,21 @@ def encerrar_escritas_interrompidas(db: Session) -> None:
 
 def importar_fila(db: Session, usuario: Usuario, dados: bytes, nome: str | None, conexao: Conexao,
                   motor: Motor, ficticio: bool) -> ResultadoImportacao:
-    """Lê a tabela do SIG e atualiza a fila do usuário. Processo novo já ganha a primeira minuta.
+    """Lê a tabela do SIG e atualiza a fila da promotoria. Processo novo já ganha a primeira minuta.
     Levanta `conexao.Recusada` com a orientação para o usuário."""
     return _atualizar_fila(db, usuario, conexao.ler_fila(dados, nome), motor, ficticio, "planilha")
 
 
 def buscar_fila(db: Session, usuario: Usuario, conexao: Conexao, motor: Motor, ficticio: bool) -> ResultadoImportacao:
-    """Pede a fila direto ao SIG, sem arquivo, e atualiza a fila do usuário do mesmo jeito que a planilha."""
+    """Pede a fila direto ao SIG, sem arquivo, e atualiza a fila da promotoria do mesmo jeito que a planilha."""
     return _atualizar_fila(db, usuario, conexao.buscar_fila(usuario.email), motor, ficticio, "sig")
 
 
 def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, ficticio: bool,
                     origem: str) -> ResultadoImportacao:
     res = ResultadoImportacao()
-    existentes = {p.numero: p for p in db.scalars(select(Processo).where(Processo.usuario_id == usuario.id))}
+    existentes = {p.numero: p for p in db.scalars(select(Processo).where(
+        Processo.promotoria_id == usuario.promotoria_id))}
     for linha in fila["linhas"]:
         # classe e assunto são texto livre da planilha e seguem para o motor: também não levam número real
         if numero_real(linha["judiciario"], ficticio) or (
@@ -252,7 +289,8 @@ def _atualizar_fila(db: Session, usuario: Usuario, fila: dict, motor: Motor, fic
                       grupo=grupo_de(linha["reu_preso"], linha["vista"]))
         p = existentes.get(linha["judiciario"])
         if p is None:
-            p = Processo(usuario_id=usuario.id, numero=linha["judiciario"][:25], origem=origem, **campos)
+            p = Processo(usuario_id=usuario.id, promotoria_id=usuario.promotoria_id,
+                         numero=linha["judiciario"][:25], origem=origem, **campos)
             _criar_minuta(p, motor)
             db.add(p)
             res.novos += 1
@@ -277,7 +315,7 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor,
     if not numeros:
         res.conferir.append("nenhum número de processo reconhecido no texto colado")
         return res
-    ja = set(db.scalars(select(Processo.numero).where(Processo.usuario_id == usuario.id)))
+    ja = numeros_da_mesa(db, usuario)
     for n in numeros:
         if numero_real(n, ficticio):
             res.recusados += 1
@@ -285,7 +323,8 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor,
         if n in ja:
             res.atualizados += 1
             continue
-        p = Processo(usuario_id=usuario.id, numero=n, origem="colagem", dv_ok=dv_ok(n), entrada=datetime.now())
+        p = Processo(usuario_id=usuario.id, promotoria_id=usuario.promotoria_id, numero=n, origem="colagem",
+                     dv_ok=dv_ok(n), entrada=datetime.now())
         _criar_minuta(p, motor)
         db.add(p)
         res.novos += 1
@@ -294,10 +333,12 @@ def colar_numeros(db: Session, usuario: Usuario, texto: str, motor: Motor,
 
 
 def apagar_processo(db: Session, usuario: Usuario, numero: str) -> bool:
-    """Apaga um processo do usuário e tudo o que é dele: minuta, autos, rascunho enviado, escrita, registro de
-    pedidos à IA e audiências com o mesmo número. Para dado que entrou por engano; só pela linha de comando."""
-    processo = db.scalar(select(Processo).where(Processo.usuario_id == usuario.id, Processo.numero == numero))
-    audiencias = db.scalars(select(Audiencia).where(Audiencia.usuario_id == usuario.id,
+    """Apaga um processo da promotoria do usuário e tudo o que é dele: minuta, autos, rascunho enviado, escrita,
+    registro de pedidos à IA e audiências com o mesmo número. Para dado que entrou por engano; só pela linha de
+    comando. O registro de acessos fica: não tem conteúdo, e diz quem mexeu no que foi apagado."""
+    processo = db.scalar(select(Processo).where(Processo.promotoria_id == usuario.promotoria_id,
+                                                Processo.numero == numero))
+    audiencias = db.scalars(select(Audiencia).where(Audiencia.promotoria_id == usuario.promotoria_id,
                                                     Audiencia.numero == numero)).all()
     if processo is None and not audiencias:
         return False
@@ -311,25 +352,42 @@ def apagar_processo(db: Session, usuario: Usuario, numero: str) -> bool:
 
 
 def fila(db: Session, usuario: Usuario, situacao: str = "a_fazer") -> list[Processo]:
-    consulta = (select(Processo).where(Processo.usuario_id == usuario.id, Processo.situacao == situacao)
+    consulta = (select(Processo).where(Processo.promotoria_id == usuario.promotoria_id,
+                                       Processo.situacao == situacao)
                 .order_by(Processo.grupo, Processo.entrada.is_(None), Processo.entrada, Processo.numero))
     return list(db.scalars(consulta))
 
 
-def processo_do_usuario(db: Session, usuario: Usuario, processo_id: int) -> Processo | None:
-    return db.scalar(select(Processo).where(Processo.id == processo_id, Processo.usuario_id == usuario.id))
+def processo_da_mesa(db: Session, usuario: Usuario, processo_id: int) -> Processo | None:
+    return db.scalar(select(Processo).where(Processo.id == processo_id,
+                                            Processo.promotoria_id == usuario.promotoria_id))
 
 
-def salvar_minuta(db: Session, processo: Processo, blocos) -> Minuta:
+def salvar_minuta(db: Session, processo: Processo, blocos, usuario: Usuario | None = None,
+                  versao: int | None = None) -> Minuta:
+    """Grava a folha. Com `versao` (a que a tela carregou), a gravação só acontece se ninguém salvou depois:
+    duas pessoas na mesma minuta não se apagam em silêncio. Levanta `MinutaMudou` nesse caso."""
     if escrevendo(processo):
         raise ValueError("a minuta está sendo escrita; espere terminar")
-    processo.minuta.blocos = documento.normalizar(blocos)
+    minuta, blocos = processo.minuta, documento.normalizar(blocos)
+    if versao is not None:
+        # a conferência e o avanço da versão num comando só: de dois salvamentos juntos, um perde e é avisado
+        mudou = db.execute(update(Minuta).where(Minuta.id == minuta.id, Minuta.versao == versao)
+                           .values(versao=versao + 1)).rowcount
+        if not mudou:
+            db.rollback()
+            raise MinutaMudou("outra pessoa alterou esta minuta; recarregue a página para ver a versão dela")
+        db.refresh(minuta)
+    else:
+        minuta.versao = (minuta.versao or 0) + 1
+    minuta.blocos = blocos
     if processo.tarefa and processo.tarefa.estado == "falhou":
         db.delete(processo.tarefa)   # a pessoa seguiu à mão: o aviso da falha não fica para sempre
-    processo.minuta.editada = True
-    processo.minuta.atualizada_em = datetime.now()
+    minuta.editada = True
+    minuta.atualizada_em = datetime.now()
+    minuta.editada_por = usuario.id if usuario is not None else None
     db.commit()
-    return processo.minuta
+    return minuta
 
 
 def refazer_minuta(db: Session, processo: Processo, motor: Motor) -> None:
@@ -344,9 +402,12 @@ def refazer_minuta(db: Session, processo: Processo, motor: Motor) -> None:
     db.commit()
 
 
-def definir_situacao(db: Session, processo: Processo, situacao: str, agora: datetime | None = None) -> None:
+def definir_situacao(db: Session, processo: Processo, situacao: str, agora: datetime | None = None,
+                     usuario: Usuario | None = None) -> None:
     if situacao not in ("a_fazer", "concluido"):
         raise ValueError("situação desconhecida")
+    if situacao == "a_fazer" and processo.entrega and usuario is not None and usuario.papel != "promotor":
+        raise SoPromotor("só o promotor tira o rascunho do SIG")
     if situacao == "concluido" and processo.situacao != "concluido":
         processo.concluido_em = agora or datetime.now()
     elif situacao == "a_fazer":
@@ -368,8 +429,10 @@ def entregar_ao_sig(db: Session, processo: Processo, usuario: Usuario, conexao: 
                     ficticio: bool) -> EntregaSig:
     """Deixa a minuta no SIG como rascunho, guarda o recibo e conclui o processo na mesa. Enviar de novo troca
     o rascunho. Quem assina e protocola é o usuário, no SIG (limite 2). Levanta ValueError com a orientação."""
-    if processo.usuario_id != usuario.id:   # a rota já filtra; aqui é a segunda barreira
-        raise ValueError("processo de outro usuário")
+    if processo.promotoria_id != usuario.promotoria_id:   # a rota já filtra; aqui é a segunda barreira
+        raise ValueError("processo de outra promotoria")
+    if usuario.papel != "promotor":
+        raise SoPromotor("só o promotor envia ao SIG")
     if escrevendo(processo):
         raise ValueError("a minuta está sendo escrita; espere terminar")
     # Limite 1 do projeto, como nos autos e no pedido à IA: em servidor de dados fictícios, número real não sai.
@@ -381,7 +444,7 @@ def entregar_ao_sig(db: Session, processo: Processo, usuario: Usuario, conexao: 
         if processo.entrega:
             db.delete(processo.entrega)
             db.flush()
-        processo.entrega = EntregaSig(usuario_id=processo.usuario_id, recibo=recibo[:40],
+        processo.entrega = EntregaSig(usuario_id=usuario.id, recibo=recibo[:40],
                                       tipo=processo.minuta.tipo, blocos=blocos,
                                       pendentes=trechos_pendentes(blocos), recebida_em=agora)
         definir_situacao(db, processo, "concluido", agora)
@@ -396,14 +459,14 @@ def mudou_depois_do_envio(processo: Processo) -> bool:
     return bool(processo.entrega and processo.minuta and processo.minuta.blocos != processo.entrega.blocos)
 
 
-def entregas_do_usuario(db: Session, usuario: Usuario) -> list[EntregaSig]:
+def entregas_da_mesa(db: Session, usuario: Usuario) -> list[EntregaSig]:
     return list(db.scalars(select(EntregaSig).join(Processo)
-                           .where(EntregaSig.usuario_id == usuario.id, Processo.usuario_id == usuario.id)
+                           .where(Processo.promotoria_id == usuario.promotoria_id)
                            .order_by(EntregaSig.recebida_em.desc(), EntregaSig.id.desc())))
 
 
-def numeros_do_usuario(db: Session, usuario: Usuario) -> set[str]:
-    return set(db.scalars(select(Processo.numero).where(Processo.usuario_id == usuario.id)))
+def numeros_da_mesa(db: Session, usuario: Usuario) -> set[str]:
+    return set(db.scalars(select(Processo.numero).where(Processo.promotoria_id == usuario.promotoria_id)))
 
 
 def autos_apagados_em(processo: Processo) -> datetime | None:
@@ -463,15 +526,15 @@ def autos_repetidos(processo: Processo, impressao: str) -> bool:
     return any(a.impressao == impressao for a in processo.autos)
 
 
-def texto_guardado(db: Session, usuario_id: int) -> int:
+def texto_guardado(db: Session, promotoria_id: int) -> int:
     soma = (select(func.coalesce(func.sum(ArquivoAutos.caracteres), 0)).join(Processo)
-            .where(Processo.usuario_id == usuario_id))
+            .where(Processo.promotoria_id == promotoria_id))
     return db.scalar(soma)
 
 
 def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, ficticio: bool,
                  chave_impressao: bytes) -> ArquivoAutos:
-    """Guarda o texto de um PDF dos autos, página a página, no processo (que já é do usuário).
+    """Guarda o texto de um PDF dos autos, página a página, no processo (que já é da promotoria de quem envia).
     Levanta `AutosRecusados` com a orientação."""
     nome = nome_de_arquivo(nome)
     if escrevendo(processo):
@@ -484,8 +547,8 @@ def juntar_autos(db: Session, processo: Processo, nome: str, leitura: Leitura, f
         raise AutosRecusados("este arquivo já está nos autos")
     if len(processo.autos) >= MAX_ARQUIVOS_AUTOS:
         raise AutosRecusados(f"o processo já tem {MAX_ARQUIVOS_AUTOS} arquivos; remova algum antes")
-    if texto_guardado(db, processo.usuario_id) + leitura.caracteres > COTA_TEXTO_AUTOS:
-        raise AutosRecusados("você chegou ao limite de texto guardado; remova autos de processos já concluídos")
+    if texto_guardado(db, processo.promotoria_id) + leitura.caracteres > COTA_TEXTO_AUTOS:
+        raise AutosRecusados("a promotoria chegou ao limite de texto guardado; remova autos de processos concluídos")
     numeros = numeros_no_texto("\n".join(leitura.paginas))
     # Limite 1 do projeto. É um alerta, não uma garantia: não enxerga página digitalizada, nome nem CPF.
     if ficticio and any(dv_ok(n) for n in numeros | numeros_no_texto(nome)):
@@ -530,7 +593,8 @@ def marcar_audiencia(db: Session, usuario: Usuario, numero: str, data: str, hora
         raise ValueError("informe a data e a hora da audiência") from None
     if tipo not in TIPOS_AUDIENCIA:
         raise ValueError("tipo de audiência desconhecido")
-    a = Audiencia(usuario_id=usuario.id, numero=achado.group(), inicio=inicio, tipo=tipo,
+    a = Audiencia(usuario_id=usuario.id, promotoria_id=usuario.promotoria_id, numero=achado.group(), inicio=inicio,
+                  tipo=tipo,
                   ficha=motor.elaborar_ficha(achado.group(), tipo), motor=motor.nome)
     db.add(a)
     db.commit()
@@ -538,14 +602,15 @@ def marcar_audiencia(db: Session, usuario: Usuario, numero: str, data: str, hora
 
 
 def pauta(db: Session, usuario: Usuario, desde: datetime, dias: int | None = None) -> list[Audiencia]:
-    consulta = select(Audiencia).where(Audiencia.usuario_id == usuario.id, Audiencia.inicio >= desde)
+    consulta = select(Audiencia).where(Audiencia.promotoria_id == usuario.promotoria_id, Audiencia.inicio >= desde)
     if dias is not None:
         consulta = consulta.where(Audiencia.inicio < desde + timedelta(days=dias))
     return list(db.scalars(consulta.order_by(Audiencia.inicio)))
 
 
-def audiencia_do_usuario(db: Session, usuario: Usuario, audiencia_id: int) -> Audiencia | None:
-    return db.scalar(select(Audiencia).where(Audiencia.id == audiencia_id, Audiencia.usuario_id == usuario.id))
+def audiencia_da_mesa(db: Session, usuario: Usuario, audiencia_id: int) -> Audiencia | None:
+    return db.scalar(select(Audiencia).where(Audiencia.id == audiencia_id,
+                                             Audiencia.promotoria_id == usuario.promotoria_id))
 
 
 def remover_audiencia(db: Session, audiencia: Audiencia) -> None:

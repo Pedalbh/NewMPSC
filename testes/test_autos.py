@@ -288,7 +288,8 @@ def test_limite_de_arquivos_por_processo_e_cota_de_texto(com_fila, banco, monkey
     assert "segundo.pdf não entrou: o processo já tem 1 arquivos" in com_fila.get("/processos/1").text
     monkeypatch.setattr("app.servicos.COTA_TEXTO_AUTOS", 300)   # a cota soma todos os processos do usuário
     enviar_pdf(com_fila, pdf(["Processo 0000102-00.2026.8.24.0000\nPeça."]), "terceiro.pdf", processo=2)
-    assert "terceiro.pdf não entrou: você chegou ao limite de texto guardado" in com_fila.get("/processos/2").text
+    html = com_fila.get("/processos/2").text
+    assert "terceiro.pdf não entrou: a promotoria chegou ao limite de texto guardado" in html
     assert contar(banco, ArquivoAutos) == 1
 
 

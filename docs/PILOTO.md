@@ -23,7 +23,7 @@ A "segunda pessoa" que confere a amostra dos relatórios por IA é sempre da mes
 ## Quem participa
 - **Três promotorias criminais**, voluntárias. Proposta de perfil, para cobrir casos diferentes: a do titular; uma de comarca maior, com vara criminal de volume alto; uma de comarca menor, com atribuição criminal misturada a outras. A escolha é do titular (cartão C17).
 - **Em cada uma:** o promotor e quem prepara minutas com ele. O piloto começa com até 3 promotores e 6 assessores.
-- **Espaço da promotoria:** hoje cada usuário só vê o que é seu. Para o assessor preparar e o promotor conferir a mesma minuta, a aplicação ganha um espaço da promotoria (cartão C18, aprovado; em construção). É condição para a Fase 2 funcionar onde há assessor.
+- **Espaço da promotoria:** hoje cada usuário só vê o que é seu. Para o assessor preparar e o promotor conferir a mesma minuta, a aplicação tem um espaço da promotoria (cartão C18; feito na 0.6.0). É condição para a Fase 2 funcionar onde há assessor.
 
 ## Fases e portões
 Só se passa de fase quando o portão é cumprido. Qualquer participante pode pedir pausa.
@@ -74,7 +74,7 @@ O protótipo mostra o destino: a fila chega com um clique e a minuta volta como 
 | Antes da | Item |
 | --- | --- |
 | Fase 1 | Recusa de número de processo real na importação e na colagem (feito, 0.5.1); termo dos participantes (`docs/piloto/TERMO-FASE1.md`); servidor de ensaio decidido em cartão (C19) |
-| Fase 2 | Segundo fator no login e troca de senha pela pessoa (item 4); registro de acessos, com prazo de guarda próprio (item 2); Postgres com migrações, limpeza no lugar do `secure_delete` e cópia de segurança com prazo compatível com o C1 (itens 3 e 9); limite de tentativas de login em armazenamento comum (item 3); disco e pasta temporária cifrados, pasta da aplicação só de leitura e agendador da limpeza dos autos (item 9); conferência de dependências e versões fixadas por hash (item 10); registros de erro sem texto de processo; exclusão de processo e de usuário (item 8); prazo de guarda da minuta com dado real; espaço da promotoria (C18, aprovado); revisão de segurança independente antes do primeiro dado real |
+| Fase 2 | Segundo fator no login e troca de senha pela pessoa (item 4); registro de acessos (feito na 0.6.0), com prazo de guarda próprio (cartão C20); Postgres com migrações, limpeza no lugar do `secure_delete` e cópia de segurança com prazo compatível com o C1 (itens 3 e 9); limite de tentativas de login em armazenamento comum (item 3); disco e pasta temporária cifrados, pasta da aplicação só de leitura e agendador da limpeza dos autos (item 9); conferência de dependências e versões fixadas por hash (item 10); registros de erro sem texto de processo; exclusão de processo e de usuário (item 8); prazo de guarda da minuta com dado real; espaço da promotoria (C18; feito na 0.6.0); revisão de segurança independente antes do primeiro dado real |
 | Fase 3 | Contrato e parecer (C4); retirada de dados pessoais de terceiros antes do envio à IA (item 6); teto de gasto (C8); prazo de guarda do registro de pedidos à IA (item 7) |
 
 Os números de item são os da seção "O que falta para uso real" de `docs/ARQUITETURA.md`.

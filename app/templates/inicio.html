@@ -4,7 +4,8 @@
 <section class="saudacao">
   <h1>{{ saudacao }}, {{ usuario.nome.split(' ')[0] }}</h1>
   <p class="fraco">
-    {% if total %}{{ total }} processo{{ 's' if total != 1 }} na sua mesa{% else %}Nenhum processo na sua mesa{% endif %}
+    <span id="promotoria">{{ usuario.espaco.nome }}</span> ·
+    {% if total %}{{ total }} processo{{ 's' if total != 1 }} na mesa{% else %}nenhum processo na mesa{% endif %}
     · {{ proximas | length }} audiência{{ 's' if proximas | length != 1 }} nos próximos 7 dias
   </p>
 </section>

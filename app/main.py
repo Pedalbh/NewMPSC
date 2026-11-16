@@ -38,6 +38,12 @@ class PrecisaEntrar(Exception):
     pass
 
 
+def _frase(e: Exception) -> str:
+    """A orientação de uma recusa, como frase. Só a primeira letra muda: siglas como SIG ficam como estão."""
+    texto = str(e)
+    return texto[:1].upper() + texto[1:] + "."
+
+
 def _dia_extenso(d: datetime) -> str:
     return f"{DIAS[d.weekday()]}, {d.day} de {MESES[d.month - 1]}"
 
@@ -129,7 +135,9 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     def usuario_atual(request: Request, db=Depends(banco)) -> Usuario:
         uid = request.session.get("uid")
         usuario = db.get(Usuario, uid) if uid else None
-        if usuario is None:
+        if usuario is None or usuario.promotoria_id is None:
+            # conferido a cada requisição: quem deixa a promotoria perde o acesso na hora, com a sessão aberta
+            request.session.clear()
             raise PrecisaEntrar()
         return usuario
 
@@ -156,13 +164,13 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         return RedirectResponse(caminho, status_code=303)
 
     def meu_processo(processo_id: int, usuario=Depends(usuario_atual), db=Depends(banco)):
-        p = servicos.processo_do_usuario(db, usuario, processo_id)
+        p = servicos.processo_da_mesa(db, usuario, processo_id)
         if p is None:
             raise HTTPException(404, "Processo não encontrado.")
         return p
 
     def minha_audiencia(audiencia_id: int, usuario=Depends(usuario_atual), db=Depends(banco)):
-        a = servicos.audiencia_do_usuario(db, usuario, audiencia_id)
+        a = servicos.audiencia_da_mesa(db, usuario, audiencia_id)
         if a is None:
             raise HTTPException(404, "Audiência não encontrada.")
         return a
@@ -207,6 +215,9 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             limite.registrar_falha(chave)
             return tela(request, "entrar.html", status=401, email=email, erro="E-mail ou senha incorretos.")
         limite.limpar(chave)
+        if usuario.promotoria_id is None:   # só depois da senha certa: não revela nada a quem tenta adivinhar
+            return tela(request, "entrar.html", status=403, email=email,
+                        erro="Sua conta não está em nenhuma promotoria. Fale com quem convidou você.")
         request.session.clear()   # sessão nova a cada login (evita fixação de sessão)
         request.session["uid"] = usuario.id
         return voltar("/")
@@ -228,8 +239,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             avisar(request, "erro", "Informe o seu nome.")
             return voltar("/configuracoes")
         usuario.nome = nome
-        usuario.cargo = str(dados.get("cargo") or "").strip()[:120]
-        usuario.promotoria = str(dados.get("promotoria") or "").strip()[:160]
+        usuario.cargo = str(dados.get("cargo") or "").strip()[:120]   # promotoria e papel só mudam pela administração
         db.merge(usuario)
         db.commit()
         avisar(request, "ok", "Dados salvos.")
@@ -310,6 +320,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
     @app.get("/processos/{processo_id}", response_class=HTMLResponse)
     def processo(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
         p = db.merge(p)
+        servicos.registrar_acesso(db, usuario, "abriu", p)
         servicos.conferir_escrita(db, p)
         resultado_novo = servicos.marcar_resultado_como_visto(db, p)
         esperando = servicos.escrevendo(p)
@@ -346,7 +357,8 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         return frase + ".", bool(arquivo.sem_texto) or not arquivo.cita_processo
 
     @app.post("/processos/{processo_id}/autos", dependencies=[Depends(exigir_csrf)])
-    async def juntar_autos(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+    async def juntar_autos(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual),
+                           db=Depends(banco)):
         destino = f"/processos/{p.id}#resultado-autos"   # o navegador rola até o resultado e põe o foco nele
         enviados = [a for a in (await request.form()).getlist("autos") if not isinstance(a, str) and a.filename]
         if not enviados:
@@ -355,7 +367,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         p = db.merge(p)
         recusas, leituras, ressalvas = [], [], 0
         try:
-            with autos.vez_do_usuario(p.usuario_id):
+            with autos.vez_do_usuario(usuario.id):
                 prazo = time.monotonic() + TEMPO_ENVIO
                 for enviado in enviados[:MAX_PDFS_POR_ENVIO]:
                     nome = servicos.nome_de_arquivo(enviado.filename)
@@ -376,29 +388,38 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             recusas.append(f"{parou}: {e}.")
         if len(enviados) > MAX_PDFS_POR_ENVIO:
             recusas.append(f"Só os {MAX_PDFS_POR_ENVIO} primeiros arquivos foram lidos; envie os demais em seguida.")
+        if leituras:
+            servicos.registrar_acesso(db, usuario, "enviou autos", p)
         tipo = "erro" if not leituras else "atencao" if recusas or ressalvas else "ok"
         avisar(request, tipo, recusas + leituras, "autos")   # recusas primeiro: são as que pedem ação
         return voltar(destino)
 
     @app.post("/processos/{processo_id}/autos/{arquivo_id}/remover", dependencies=[Depends(exigir_csrf)])
-    def remover_autos(request: Request, arquivo_id: int, p=Depends(meu_processo), db=Depends(banco)):
+    def remover_autos(request: Request, arquivo_id: int, p=Depends(meu_processo), usuario=Depends(usuario_atual),
+                      db=Depends(banco)):
         try:
             if not servicos.remover_autos(db, db.merge(p), arquivo_id):
                 raise HTTPException(404, "Arquivo não encontrado.")
         except servicos.AutosRecusados as e:
             raise HTTPException(409, str(e).capitalize() + ".") from None
+        servicos.registrar_acesso(db, usuario, "removeu autos", p)
         avisar(request, "ok", "Arquivo removido dos autos.", "autos")
         return voltar(f"/processos/{p.id}#resultado-autos")
 
     @app.post("/processos/{processo_id}/situacao", dependencies=[Depends(exigir_csrf)])
-    async def situacao(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+    async def situacao(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual),
+                       db=Depends(banco)):
         nova = str((await request.form()).get("situacao") or "")
         try:
             p = db.merge(p)
             no_sig = p.entrega is not None
-            servicos.definir_situacao(db, p, nova, agora())
+            servicos.definir_situacao(db, p, nova, agora(), usuario)
+        except servicos.SoPromotor as e:
+            raise HTTPException(403, _frase(e)) from None
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
+        servicos.registrar_acesso(db, usuario, ("tirou do SIG" if no_sig else "devolveu à fila")
+                                  if nova == "a_fazer" else "concluiu", p)
         if nova == "concluido":
             fim = servicos.autos_apagados_em(p) if p.autos else None
             avisar(request, "ok", "Processo concluído." + (
@@ -414,33 +435,36 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         estava_na_mesa = p.situacao == "a_fazer"
         try:
             entrega = servicos.entregar_ao_sig(db, db.merge(p), usuario, conexao, agora(), config.dados_ficticios)
+        except servicos.SoPromotor as e:
+            raise HTTPException(403, _frase(e)) from None
         except ValueError as e:
             raise HTTPException(409, str(e).capitalize() + ".") from None
         except SigIndisponivel:
             avisar(request, "erro", [f"O {conexao.nome} não respondeu. A minuta não foi enviada e continua aqui.",
                                      "Tente de novo em instantes. Se continuar, use Baixar ou copiar."])
             return voltar(f"/processos/{p.id}")
+        servicos.registrar_acesso(db, usuario, "enviou ao SIG", p)
         falta = "" if not entrega.pendentes else (
             " Foi com 1 trecho entre colchetes a completar." if entrega.pendentes == 1
             else f" Foi com {entrega.pendentes} trechos entre colchetes a completar.")
         avisar(request, "atencao" if entrega.pendentes else "ok", [
             f"A minuta de {p.numero} foi para o {conexao.nome} como rascunho (recibo {entrega.recibo}).{falta}",
             "Falta você assinar e protocolar no SIG." + (
-                " O processo saiu da sua mesa e está em Concluídos." if estava_na_mesa
+                " O processo saiu da mesa e está em Concluídos." if estava_na_mesa
                 else " O rascunho anterior foi substituído.")],
             elo=("Abrir o processo enviado", f"/processos/{p.id}"))
         return voltar("/")
 
     @app.get("/sig-simulado", response_class=HTMLResponse, dependencies=[Depends(exigir_busca_direta)])
     def sig_simulado(request: Request, usuario=Depends(usuario_atual), db=Depends(banco)):
-        """O outro lado do envelope: o que o SIG tem para este usuário e o que recebeu dele."""
+        """O outro lado do envelope: o que o SIG tem para esta promotoria e o que recebeu dela."""
         try:
             linhas = conexao.buscar_fila(usuario.email)["linhas"]
         except SigIndisponivel:
             raise HTTPException(503, f"O {conexao.nome} não respondeu. Tente de novo em instantes.") from None
-        entregas = servicos.entregas_do_usuario(db, usuario)
+        entregas = servicos.entregas_da_mesa(db, usuario)
         recibos = {e.processo.numero: e.recibo for e in entregas}
-        buscados = servicos.numeros_do_usuario(db, usuario)
+        buscados = servicos.numeros_da_mesa(db, usuario)
         estados = [(linha, "rascunho" if linha["judiciario"] in recibos else
                     "mesa" if linha["judiciario"] in buscados else "sig") for linha in linhas]
         return tela(request, "sig_simulado.html", usuario=usuario, pagina="sig", estados=estados, recibos=recibos,
@@ -448,11 +472,12 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
                     entregas=entregas)
 
     @app.post("/processos/{processo_id}/refazer", dependencies=[Depends(exigir_csrf)])
-    def refazer(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+    def refazer(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
         try:
             servicos.refazer_minuta(db, db.merge(p), motor)
         except ValueError as e:
             raise HTTPException(409, str(e).capitalize() + ".") from None
+        servicos.registrar_acesso(db, usuario, "refez a minuta", p)
         avisar(request, "ok", "Minuta em branco de novo." if motor.usa_autos
                else "Minuta refeita pelo motor.")
         return voltar(f"/processos/{p.id}")
@@ -462,15 +487,17 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
             servicos.escrever_minuta(db, processo_id, chave, motor)
 
     @app.post("/processos/{processo_id}/escrever", dependencies=[Depends(exigir_csrf)])
-    async def escrever(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+    async def escrever(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual),
+                       db=Depends(banco)):
         """Pede ao motor de IA o relatório a partir dos autos. A escrita roda fora da requisição."""
         confirmado = (await request.form()).get("confirmo") == "1"
         try:   # fora do laço de eventos: o pedido espera uma tranca e o banco
-            tarefa = await run_in_threadpool(servicos.pedir_escrita, db, db.merge(p), motor, config.dados_ficticios,
-                                             confirmado)
+            tarefa = await run_in_threadpool(servicos.pedir_escrita, db, db.merge(p), usuario, motor,
+                                             config.dados_ficticios, confirmado)
         except servicos.EscritaRecusada as e:
             avisar(request, "erro", f"O relatório não foi pedido: {e}.")
             return voltar(f"/processos/{p.id}")
+        servicos.registrar_acesso(db, usuario, "pediu o relatório à IA", p)
         em_segundo_plano(_escrever, p.id, tarefa.chave)
         return voltar(f"/processos/{p.id}")
 
@@ -481,13 +508,22 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         return {"estado": p.tarefa.estado if p.tarefa else "nenhuma"}
 
     @app.put("/api/processos/{processo_id}/minuta", dependencies=[Depends(exigir_csrf)])
-    async def salvar(request: Request, p=Depends(meu_processo), db=Depends(banco)):
+    async def salvar(request: Request, p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
         try:
             corpo = await request.json()
-            m = servicos.salvar_minuta(db, db.merge(p), corpo.get("blocos") if isinstance(corpo, dict) else None)
+            corpo = corpo if isinstance(corpo, dict) else {}
+            versao = corpo.get("versao")
+            p = db.merge(p)
+            primeira = p.minuta.editada_por != usuario.id   # o registro não ganha uma linha a cada tecla
+            m = servicos.salvar_minuta(db, p, corpo.get("blocos"), usuario,
+                                       versao if isinstance(versao, int) and not isinstance(versao, bool) else None)
+        except servicos.MinutaMudou as e:
+            raise HTTPException(409, _frase(e)) from None
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
-        return {"salva_em": m.atualizada_em.strftime("%H:%M"), "paragrafos": len(m.blocos)}
+        if primeira:
+            servicos.registrar_acesso(db, usuario, "editou a minuta", p)
+        return {"salva_em": m.atualizada_em.strftime("%H:%M"), "paragrafos": len(m.blocos), "versao": m.versao}
 
     def _sem_escrita_em_curso(p) -> None:
         if servicos.escrevendo(p):
@@ -497,15 +533,17 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         return quote(f"minuta-{p.numero}.{extensao}")
 
     @app.get("/processos/{processo_id}/minuta.docx")
-    def baixar_docx(p=Depends(meu_processo)):
+    def baixar_docx(p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
         _sem_escrita_em_curso(p)
+        servicos.registrar_acesso(db, usuario, "baixou a minuta", p)
         return Response(documento.docx(p.minuta.blocos), headers={
             "Content-Disposition": f"attachment; filename*=UTF-8''{_nome_arquivo(p, 'docx')}"},
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
 
     @app.get("/processos/{processo_id}/minuta.txt")
-    def baixar_texto(p=Depends(meu_processo)):
+    def baixar_texto(p=Depends(meu_processo), usuario=Depends(usuario_atual), db=Depends(banco)):
         _sem_escrita_em_curso(p)
+        servicos.registrar_acesso(db, usuario, "copiou a minuta", p)
         return PlainTextResponse(documento.texto_simples(p.minuta.blocos))
 
     # ------------------------------------------------------------------ audiências

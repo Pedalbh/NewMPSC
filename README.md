@@ -4,7 +4,7 @@ Aplicação web de trabalho do promotor: os processos recebidos, a minuta de cad
 
 Projeto separado do Gabinete: reaproveita, por cópia, o leitor da planilha do SIG e o gerador de .docx (`app/nucleo/ORIGEM.md`), e não altera aquele repositório.
 
-**Estado (0.5.1):** só dados fictícios. Os autos entram em PDF e são lidos página a página. Com `NEWMPSC_MOTOR=claude`, o relatório da minuta é escrito pela API do Claude a partir dos autos, com a página de cada afirmação; fundamentação e pedido ficam com o promotor. O padrão continua sendo o motor de demonstração, sem IA. Com `NEWMPSC_SIG=simulado`, um SIG simulado mostra o envelope inteiro: a fila chega com um clique e a minuta volta como rascunho, sem arquivo (protótipo; nada chega ao SIG de verdade). A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
+**Estado (0.6.0):** só dados fictícios. Os autos entram em PDF e são lidos página a página. Com `NEWMPSC_MOTOR=claude`, o relatório da minuta é escrito pela API do Claude a partir dos autos, com a página de cada afirmação; fundamentação e pedido ficam com o promotor. O padrão continua sendo o motor de demonstração, sem IA. Com `NEWMPSC_SIG=simulado`, um SIG simulado mostra o envelope inteiro: a fila chega com um clique e a minuta volta como rascunho, sem arquivo (protótipo; nada chega ao SIG de verdade). A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
 
 ## Rodar no computador
 
@@ -18,7 +18,7 @@ uvicorn app.servidor:app --reload  # http://127.0.0.1:8000
 ## Ver o protótipo do envelope
 
 ```
-NEWMPSC_SIG=simulado python -m app.cli criar-usuario voce@exemplo.invalid "Seu Nome"
+NEWMPSC_SIG=simulado python -m app.cli criar-usuario voce@exemplo.invalid "Seu Nome" "Promotoria Fictícia"
 NEWMPSC_SIG=simulado uvicorn app.servidor:app      # http://127.0.0.1:8000
 ```
 
@@ -49,6 +49,6 @@ O teste `testes/test_navegador.py` faz a jornada inteira num navegador de verdad
 
 ## Servidor de teste
 
-`docker build -t newmpsc . && docker run -p 8000:8000 -e NEWMPSC_AMBIENTE=producao -e NEWMPSC_SEGREDO=... -v newmpsc-dados:/dados newmpsc`, atrás de HTTPS. Criar usuários com `python -m app.cli criar-usuario`.
+`docker build -t newmpsc . && docker run -p 8000:8000 -e NEWMPSC_AMBIENTE=producao -e NEWMPSC_SEGREDO=... -v newmpsc-dados:/dados newmpsc`, atrás de HTTPS. Criar usuários com `python -m app.cli criar-usuario EMAIL "Nome" "Promotoria" [promotor|assessor]`: quem é da mesma promotoria vê a mesma mesa, e só o promotor envia ao SIG. `mover-usuario` e `desligar-usuario` trocam ou tiram o acesso na hora; `acessos "Promotoria"` lista o registro de acessos.
 
 Arquitetura e decisões: `docs/ARQUITETURA.md`. Regras de trabalho: `CLAUDE.md`. Decisões à espera do titular: `docs/CARTOES.md`. Plano do piloto: `docs/PILOTO.md` (materiais da Fase 1 em `docs/piloto/`). Pedido de integração à TI: `docs/PEDIDO-TI.md`.

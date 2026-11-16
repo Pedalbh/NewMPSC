@@ -10,13 +10,14 @@
         {% if p.situacao == 'a_fazer' %}
         <input type="hidden" name="situacao" value="concluido">
         <button class="btn largo" type="submit">{{ 'Concluir sem enviar ao SIG' if sig_direto else 'Marcar como concluído' }}</button>
-        {% else %}
+        {% elif not p.entrega or usuario.papel == 'promotor' %}
         <input type="hidden" name="situacao" value="a_fazer">
         <button class="btn largo" type="submit">{{ 'Tirar do SIG e voltar à mesa' if p.entrega else 'Devolver à fila' }}</button>
         {% endif %}
       </form>
       {% if sig_direto and p.situacao == 'a_fazer' %}<p class="fraco pequeno">Use se já resolveu este processo fora daqui.</p>
-      {% elif p.entrega %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a sua fila.</p>{% endif %}
+      {% elif p.entrega and usuario.papel == 'promotor' %}<p class="fraco pequeno">O rascunho sai do {{ sig_nome }} e o processo volta para a fila.</p>
+      {% elif p.entrega %}<p class="fraco pequeno" id="so-promotor-tira">Só o promotor tira o rascunho do SIG.</p>{% endif %}
 {% endmacro %}
 <nav class="trilha" aria-label="Você está em"><a class="elo" href="/">‹ Processos</a></nav>
 <section class="cabecalho-proc">
@@ -59,7 +60,11 @@
       <p>Confira cada página citada e complete os trechos entre colchetes. A fundamentação e o pedido são seus.</p>
     </div>
     {% endif %}
-    <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" aria-label="Texto da minuta, editável">
+    <div class="aviso erro" id="conflito" role="alert" tabindex="-1" hidden>
+      <p>Outra pessoa alterou esta minuta.</p>
+      <p>O que você escreveu depois disso não foi salvo. Copie o que precisar e <a href="/processos/{{ p.id }}">recarregue a página</a>.</p>
+    </div>
+    <div class="folha" id="folha" data-salvar="/api/processos/{{ p.id }}/minuta" data-versao="{{ minuta.versao or 0 }}" aria-label="Texto da minuta, editável">
       {% for b in minuta.blocos %}<p class="b b-{{ b.estilo }}" data-estilo="{{ b.estilo }}" contenteditable="true" spellcheck="true">{{ b.texto }}</p>{% endfor %}
     </div>
     {% endif %}
@@ -71,6 +76,9 @@
         <h2>Minuta</h2>
         {% if not escrevendo %}<span class="selo empurra" id="estado-salvar" role="status" aria-live="polite">{{ 'Salva às ' ~ (minuta.atualizada_em | hora) if minuta.editada else 'Sem alterações' }}</span>{% endif %}
       </div>
+      {% if minuta.editor and minuta.editor.id != usuario.id %}
+      <p class="fraco pequeno" id="quem-editou">Última alteração: {{ minuta.editor.nome }}, {{ minuta.atualizada_em | data }} às {{ minuta.atualizada_em | hora }}.</p>
+      {% endif %}
       {% if escrevendo %}
       <p class="fraco">Aguarde o relatório para baixar ou copiar.</p>
       {% else %}
@@ -83,11 +91,15 @@
         {% if mudou %}<p id="mudou">A minuta mudou depois do envio. O rascunho no SIG é o anterior.</p>{% endif %}
         <p id="trechos" {% if not pendentes %}hidden{% endif %}>{{ '1 trecho entre colchetes a completar' if pendentes == 1 else pendentes ~ ' trechos entre colchetes a completar' }}</p>
       </div>
+      {% if usuario.papel != 'promotor' %}
+      <p class="pequeno" id="so-promotor">Só o promotor envia ao SIG. Deixe a minuta pronta: ele vê esta mesma tela.</p>
+      {% else %}
       <form method="post" action="/processos/{{ p.id }}/entregar" id="form-entregar">
         <input type="hidden" name="csrf" value="{{ csrf }}">
         <button class="btn {{ 'principal' if not em_branco and not pendentes and (mudou or not p.entrega) }} largo" type="submit" id="enviar-sig" {% if not em_branco and (mudou or not p.entrega) %}data-principal{% endif %}>{{ 'Trocar o rascunho no SIG' if p.entrega else 'Enviar ao ' ~ sig_nome }}</button>
       </form>
       <p class="fraco pequeno">{{ 'O rascunho que está lá é substituído por esta versão.' if p.entrega else 'Vai como rascunho, sem assinatura. Você assina e protocola no SIG.' }}</p>
+      {% endif %}
       {{ mudar_situacao() }}
       <details>
         <summary>Baixar ou copiar</summary>

@@ -2,14 +2,16 @@
 {% block titulo %}Seus dados · NewMPSC{% endblock %}
 {% block classe_main %}estreito{% endblock %}
 {% block conteudo %}
-<section class="saudacao"><h1>Seus dados</h1><p class="fraco">Aparecem no fecho das peças e na sua mesa.</p></section>
+<section class="saudacao"><h1>Seus dados</h1><p class="fraco">Aparecem na mesa da promotoria.</p></section>
 <section class="cartao">
   <form method="post" action="/configuracoes" class="pilha">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label class="campo">Nome <input type="text" name="nome" value="{{ usuario.nome }}" required maxlength="120" autocomplete="name"></label>
     <label class="campo">Cargo <input type="text" name="cargo" value="{{ usuario.cargo }}" maxlength="120"></label>
-    <label class="campo">Promotoria <input type="text" name="promotoria" value="{{ usuario.promotoria }}" maxlength="160"></label>
     <label class="campo">E-mail de acesso <input type="email" value="{{ usuario.email }}" disabled></label>
+    <label class="campo">Promotoria <input type="text" value="{{ usuario.espaco.nome }}" disabled></label>
+    <label class="campo">Papel <input type="text" value="{{ 'Promotor' if usuario.papel == 'promotor' else 'Assessor' }}" disabled></label>
+    <p class="fraco pequeno">Quem é da mesma promotoria vê a mesma mesa. Só o promotor envia ao SIG. Promotoria e papel são mudados por quem administra.</p>
     <button class="btn principal" type="submit">Salvar</button>
   </form>
 </section>

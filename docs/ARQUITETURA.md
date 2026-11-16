@@ -72,11 +72,21 @@ O usuário envia os autos e pede o relatório na tela do processo. A escrita rod
 - **13/11/2026 – Dos autos guarda-se o texto, não o arquivo**: menos dado sensível parado no servidor e nenhuma rota que devolva arquivo enviado.
 - **13/11/2026 – Motor pela API do Claude direta** (titular); jurisprudência conferida pelo JuriBase; fonte de legislação vigente a definir.
 
+## Espaço da promotoria (0.6.0, cartão C18)
+- **De quem é o dado:** processo e audiência pertencem a uma promotoria (`promotoria_id`). `usuario_id` passa a dizer só quem trouxe ou marcou. Minuta, autos, escrita e rascunho enviado seguem o processo.
+- **Quem vê:** toda consulta de `app/servicos.py` filtra pela promotoria de quem pede. As rotas chegam ao processo por `processo_da_mesa` e à audiência por `audiencia_da_mesa`; fora da promotoria a resposta é 404.
+- **Papéis:** promotor e assessor veem e editam a mesma mesa. Enviar ao SIG e tirar o rascunho de lá é só do promotor, conferido no serviço (`SoPromotor`) e não só na tela.
+- **Duas pessoas na mesma minuta:** a tela carrega a versão e a manda de volta ao salvar. Se outra pessoa salvou antes, o servidor recusa (409) e a tela avisa; o texto de quem salvou primeiro fica.
+- **Entrada e saída:** conta sem promotoria não entra, e a conferência é feita a cada requisição: quem é desligado ou movido perde o acesso antigo no clique seguinte. O que a pessoa fez fica com a promotoria.
+- **Registro de acessos (`acessos`):** quem abriu, editou, baixou, enviou, tirou do SIG, mexeu nos autos ou pediu relatório, em qual processo e quando. Sem conteúdo. Só acrescenta: nenhuma rota lê, altera ou apaga. Hoje só a linha de comando lista (`app.cli acessos`).
+- **Limites:** os pedidos à IA contam por pessoa; a cota de texto dos autos conta por promotoria.
+- **Banco antigo:** na partida, cada conta ganha uma promotoria só dela. Contas com o mesmo texto de promotoria não são juntadas; juntar é ato de quem administra (`app.cli mover-usuario`).
+
 ## O que falta para uso real
 As decisões que são do titular estão em `docs/CARTOES.md`.
 
 1. Verificação de fontes, e só então fundamentação escrita pelo motor; leitura das páginas digitalizadas; ficha de audiência pelo motor.
-2. Hospedagem e contrato institucionais; parecer de LGPD; registro de acessos.
+2. Hospedagem e contrato institucionais; parecer de LGPD. O registro de acessos existe desde a 0.6.0; falta decidir quem o lê e por quanto tempo fica (cartão C20), e registrar também entrada e saída.
 3. Migrações de banco (Alembic) e Postgres; limite de tentativas em armazenamento compartilhado.
 4. Segundo fator no login; troca de senha pela pessoa.
 5. Pauta lida do eproc ou do 365, em vez de digitada. Integração oficial com o SIG no lugar do simulado (C16) e autos vindos do eproc, em vez de PDF enviado à mão.
