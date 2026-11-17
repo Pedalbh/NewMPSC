@@ -219,7 +219,8 @@ def registrar_leitura_do_registro(db: Session, usuario: Usuario, agora: datetime
     """Toda leitura do registro fica anotada, em qualquer página. Leituras da mesma pessoa em dez minutos viram
     uma linha só, para o registro não se encher de si mesmo."""
     recente = db.scalar(select(func.count()).select_from(Acesso).where(
-        Acesso.usuario_id == usuario.id, Acesso.acao == LEITURA_DO_REGISTRO,
+        Acesso.usuario_id == usuario.id, Acesso.promotoria_id == usuario.promotoria_id,
+        Acesso.acao == LEITURA_DO_REGISTRO,
         Acesso.quando > agora - timedelta(minutes=10)))
     if not recente:
         registrar_acesso(db, usuario, LEITURA_DO_REGISTRO)

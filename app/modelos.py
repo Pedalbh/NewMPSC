@@ -24,7 +24,9 @@ class Base(DeclarativeBase):
     pass
 
 
-GUARDA_DOS_ACESSOS_DIAS = 365   # cartão C20: depois disso a linha do registro de acessos é apagada
+# Cartão C20: depois disso a linha do registro de acessos é apagada. O prazo também está no gatilho do SQLite,
+# criado com IF NOT EXISTS: mudar o número aqui exige dar outro nome ao gatilho em `criar_banco`.
+GUARDA_DOS_ACESSOS_DIAS = 365
 PAPEIS = ("promotor", "assessor")   # só o promotor envia ao SIG; os dois veem e editam a mesa da promotoria
 
 
