@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block titulo %}Registro · NewMPSC{% endblock %}
+{% block classe_main %}estreito{% endblock %}
+{% block conteudo %}
+<section class="saudacao">
+  <h1>Registro de acessos</h1>
+  <p class="fraco">Quem fez o quê na mesa da promotoria. Só você vê esta tela. Cada linha é apagada depois de um ano.</p>
+</section>
+{% if folheando %}<a class="btn" href="/registro" id="registro-recentes">Ver as mais recentes</a>{% endif %}
+{% for dia, linhas in dias.items() %}
+<section class="cartao" aria-labelledby="dia-{{ loop.index }}">
+  <h2 class="dia" id="dia-{{ loop.index }}">{{ dia }}</h2>
+  <ul class="registro">
+    {% for l in linhas %}
+    <li>
+      <time class="registro-quando fraco pequeno" datetime="{{ l.quando.isoformat(timespec='minutes') }}">{{ l.quando | hora }}</time>
+      <span class="registro-oque"><strong>{{ l.quem }}</strong> {{ l.frase }}{% if l.processo %} <span class="num">{{ l.processo }}</span>{% endif %}{% if l.vezes > 1 %} <span class="fraco">· {{ l.vezes }} vezes</span>{% endif %}{% if l.barrado %} <span class="selo atencao">Barrado</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% else %}
+<section class="cartao"><p class="fraco">Nada registrado{{ ' antes disso' if folheando }}.</p></section>
+{% endfor %}
+{% if mais %}<a class="btn largo" href="/registro?antes={{ mais }}" id="registro-mais">Ver as anteriores</a>{% endif %}
+{% endblock %}

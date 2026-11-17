@@ -42,7 +42,7 @@ Só se passa de fase quando o portão é cumprido. Qualquer participante pode pe
 - Não depende de contrato com fornecedor de IA nem de hospedagem institucional, porque nenhum dado real entra. Para isso valer na prática, e não só como promessa:
   - cada participante assina um termo curto: no ensaio, só dados fictícios;
   - a aplicação só aceita número de processo claramente fictício na planilha, na colagem, na pauta, nos autos, no pedido à IA e no envio ao SIG (desde a 0.5.1). Não examina o texto livre da minuta e não reconhece nome nem documento;
-  - o servidor de ensaio é hospedagem nova: onde fica, quem opera e se o motor de IA liga nele são decisão do titular (cartão C19). Até lá, o ensaio roda com o motor de demonstração, sem IA;
+  - o servidor de ensaio é hospedagem nova: onde fica, quem opera e se o motor de IA liga nele são decisão do titular. O C19 decidiu a parte da IA (fica desligada, como porta para depois); onde o ensaio roda é o cartão C23. O ensaio roda com o motor de demonstração, sem IA;
   - o banco do ensaio é apagado ao fim da fase.
 - **Portão 1:** cada participante faz o roteiro inteiro sem ajuda; os defeitos achados foram corrigidos; nenhum dado real entrou.
 
@@ -73,8 +73,8 @@ O protótipo mostra o destino: a fila chega com um clique e a minuta volta como 
 
 | Antes da | Item |
 | --- | --- |
-| Fase 1 | Recusa de número de processo real na importação e na colagem (feito, 0.5.1); termo dos participantes (`docs/piloto/TERMO-FASE1.md`); servidor de ensaio decidido em cartão (C19) |
-| Fase 2 | Segundo fator no login e troca de senha pela pessoa (item 4); registro de acessos (feito na 0.6.0), com prazo de guarda próprio (cartão C20); Postgres com migrações, limpeza no lugar do `secure_delete` e cópia de segurança com prazo compatível com o C1 (itens 3 e 9); limite de tentativas de login em armazenamento comum (item 3); disco e pasta temporária cifrados, pasta da aplicação só de leitura e agendador da limpeza dos autos (item 9); conferência de dependências e versões fixadas por hash (item 10); registros de erro sem texto de processo; exclusão de processo e de usuário (item 8); prazo de guarda da minuta com dado real; espaço da promotoria (C18; feito na 0.6.0); revisão de segurança independente antes do primeiro dado real |
+| Fase 1 | Recusa de número de processo real na importação e na colagem (feito, 0.5.1); termo dos participantes (`docs/piloto/TERMO-FASE1.md`); onde o ensaio roda, decidido em cartão (C23) |
+| Fase 2 | Segundo fator no login e troca de senha pela pessoa (item 4); registro de acessos, lido pelo promotor e com guarda de um ano (cartão C20; feito na 0.7.0); Postgres com migrações, limpeza no lugar do `secure_delete` e cópia de segurança com prazo compatível com o C1 (itens 3 e 9); limite de tentativas de login em armazenamento comum (item 3); disco e pasta temporária cifrados, pasta da aplicação só de leitura e agendador da limpeza dos autos (item 9); conferência de dependências e versões fixadas por hash (item 10); registros de erro sem texto de processo; exclusão de processo e de usuário (item 8); prazo de guarda da minuta com dado real; espaço da promotoria (C18; feito na 0.6.0); revisão de segurança independente antes do primeiro dado real |
 | Fase 3 | Contrato e parecer (C4); retirada de dados pessoais de terceiros antes do envio à IA (item 6); teto de gasto (C8); prazo de guarda do registro de pedidos à IA (item 7) |
 
 Os números de item são os da seção "O que falta para uso real" de `docs/ARQUITETURA.md`.
@@ -115,7 +115,7 @@ Volta-se só depois de a causa estar corrigida, com teste, e de o titular autori
 
 ## Decisões que ainda vão virar cartão
 Além do C16, do C17 e do C18, já decididos:
-- onde fica o servidor de ensaio da Fase 1, quem opera e se a IA liga nele (já aberto: C19);
+- onde roda o ensaio da Fase 1 (aberto: C23) e onde o sistema roda com autos reais (aberto: C22);
 - por quanto tempo fica a minuta com dado real. O C13 ("a minuta fica") foi decidido com dado fictício;
 - se processos sigilosos e com dados de vítimas entram na Fase 2;
 - o que se apaga, e quando, ao fim do piloto.

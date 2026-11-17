@@ -4,7 +4,7 @@ Aplicação web de trabalho do promotor: os processos recebidos, a minuta de cad
 
 Projeto separado do Gabinete: reaproveita, por cópia, o leitor da planilha do SIG e o gerador de .docx (`app/nucleo/ORIGEM.md`), e não altera aquele repositório.
 
-**Estado (0.6.0):** só dados fictícios. Os autos entram em PDF e são lidos página a página. Com `NEWMPSC_MOTOR=claude`, o relatório da minuta é escrito pela API do Claude a partir dos autos, com a página de cada afirmação; fundamentação e pedido ficam com o promotor. O padrão continua sendo o motor de demonstração, sem IA. Com `NEWMPSC_SIG=simulado`, um SIG simulado mostra o envelope inteiro: a fila chega com um clique e a minuta volta como rascunho, sem arquivo (protótipo; nada chega ao SIG de verdade). A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
+**Estado (0.7.0):** só dados fictícios. Os autos entram em PDF e são lidos página a página. Com `NEWMPSC_MOTOR=claude`, o relatório da minuta é escrito pela API do Claude a partir dos autos, com a página de cada afirmação; fundamentação e pedido ficam com o promotor. O padrão continua sendo o motor de demonstração, sem IA. Com `NEWMPSC_SIG=simulado`, um SIG simulado mostra o envelope inteiro: a fila chega com um clique e a minuta volta como rascunho, sem arquivo (protótipo; nada chega ao SIG de verdade). A API do Claude e a integração oficial com o SIG entram trocando um adaptador em `app/portas.py`.
 
 ## Rodar no computador
 

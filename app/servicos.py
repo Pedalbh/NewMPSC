@@ -15,6 +15,7 @@ from sqlalchemy.orm.exc import StaleDataError
 
 from .autos import Leitura, impressao, limpar
 from .modelos import (
+    GUARDA_DOS_ACESSOS_DIAS,
     Acesso,
     ArquivoAutos,
     Audiencia,
@@ -34,7 +35,7 @@ CNJ = re.compile(r"(?<!\d)\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}(?!\d)")
 GRUPOS = ("Réu preso", "Vista urgente", "Intimação", "Outros")
 MAX_COLAGEM = 200
 MAX_ARQUIVOS_AUTOS = 30   # por processo
-ESCRITAS_POR_HORA, ESCRITAS_POR_DIA = 20, 60   # pedidos ao serviço de IA, por usuário
+ESCRITAS_POR_HORA, ESCRITAS_POR_DIA = 20, 60   # pedidos ao serviço de IA, por promotoria (cartão C21)
 ESCRITAS_AO_MESMO_TEMPO = 4                   # no servidor todo
 PRAZO_DA_ESCRITA = timedelta(minutes=15)      # depois disso a escrita é dada como falha
 ORIGEM_EM_BRANCO, ORIGEM_IA = "em branco", "IA, a conferir"
@@ -148,9 +149,91 @@ def versao_da_tela(valor) -> int | None:
     return valor
 
 
-def acessos_da_promotoria(db: Session, promotoria_id: int, limite: int = 200) -> list[Acesso]:
-    return list(db.scalars(select(Acesso).where(Acesso.promotoria_id == promotoria_id)
-                           .order_by(Acesso.quando.desc(), Acesso.id.desc()).limit(limite)))
+def acessos_da_promotoria(db: Session, promotoria_id: int, limite: int = 200, antes: int | None = None) -> list[Acesso]:
+    """As linhas mais recentes do registro de uma promotoria; `antes` (um id) pede as anteriores a ele."""
+    consulta = select(Acesso).where(Acesso.promotoria_id == promotoria_id)
+    if antes is not None:
+        consulta = consulta.where(Acesso.id < antes)
+    return list(db.scalars(consulta.order_by(Acesso.id.desc()).limit(limite)))
+
+
+@dataclass
+class LinhaDoRegistro:
+    quando: datetime
+    quem: str
+    frase: str      # a ação, escrita para ler depois do nome
+    processo: str   # o número, se o processo ainda existe nesta promotoria
+    barrado: bool   # tentativa que a aplicação recusou
+    vezes: int = 1  # repetições seguidas da mesma pessoa, ação e processo, juntas numa linha
+
+
+# o que fica gravado é curto e estável; a tela escreve como frase (parecer de design do C20)
+_FRASES = {
+    "negado: enviar ao SIG": "tentou enviar ao SIG",
+    "negado: tirar do SIG": "tentou tirar o rascunho do SIG",
+    "negado: processo de fora": "tentou abrir processo de outra promotoria",
+    "negado: audiência de fora": "tentou abrir audiência de outra promotoria",
+    "negado: ler o registro": "tentou ler o registro de acessos",
+    "administração: entrou como promotor": "entrou na promotoria, para enviar ao SIG",
+    "administração: entrou como assessor": "entrou na promotoria, para preparar minutas",
+    "administração: saiu (movido)": "saiu da promotoria (transferência)",
+    "administração: desligado": "saiu da promotoria (desligamento)",
+}
+# entrada e saída da aplicação ficam gravadas para apurar incidente, mas não aparecem para o promotor: o
+# cartão C20 fala em quem mexeu em cada processo, não em horário de trabalho de colega
+FORA_DA_TELA = ("entrou", "saiu")
+LEITURA_DO_REGISTRO = "abriu o registro de acessos"
+
+
+def registro_para_o_promotor(db: Session, usuario: Usuario, limite: int = 100,
+                             antes: int | None = None) -> tuple[list[LinhaDoRegistro], int | None]:
+    """Cartão C20: o promotor lê o registro da sua promotoria, e só o dela. Nome e número saem de consultas
+    que também filtram pela promotoria: uma linha nunca mostra dado de fora. Devolve as linhas e, se houver
+    mais antigas, o id a partir do qual pedi-las."""
+    if usuario.papel != "promotor":
+        raise SoPromotor("só o promotor lê o registro de acessos")
+    consulta = select(Acesso).where(Acesso.promotoria_id == usuario.promotoria_id, Acesso.acao.not_in(FORA_DA_TELA))
+    if antes is not None:
+        consulta = consulta.where(Acesso.id < antes)
+    achadas = list(db.scalars(consulta.order_by(Acesso.id.desc()).limit(limite + 1)))
+    brutas, mais = achadas[:limite], (achadas[limite - 1].id if len(achadas) > limite else None)
+    nomes = dict(db.execute(select(Usuario.id, Usuario.nome)
+                            .where(Usuario.id.in_({x.usuario_id for x in brutas}))).all())
+    numeros = dict(db.execute(select(Processo.id, Processo.numero).where(
+        Processo.promotoria_id == usuario.promotoria_id,
+        Processo.id.in_({x.processo_id for x in brutas if x.processo_id}))).all())
+    linhas, anterior = [], None
+    for x in brutas:
+        chave = (x.usuario_id, x.acao, x.processo_id, x.quando.date())
+        if chave == anterior:
+            linhas[-1].vezes += 1   # a lista vem da mais nova para a mais antiga: fica o horário da última vez
+            continue
+        anterior = chave
+        linhas.append(LinhaDoRegistro(
+            x.quando, nomes.get(x.usuario_id, "Conta removida"), _FRASES.get(x.acao, x.acao),
+            numeros.get(x.processo_id, "Processo apagado") if x.processo_id else "", x.acao.startswith("negado")))
+    return linhas, mais
+
+
+def registrar_leitura_do_registro(db: Session, usuario: Usuario, agora: datetime) -> None:
+    """Toda leitura do registro fica anotada, em qualquer página. Leituras da mesma pessoa em dez minutos viram
+    uma linha só, para o registro não se encher de si mesmo."""
+    recente = db.scalar(select(func.count()).select_from(Acesso).where(
+        Acesso.usuario_id == usuario.id, Acesso.promotoria_id == usuario.promotoria_id,
+        Acesso.acao == LEITURA_DO_REGISTRO,
+        Acesso.quando > agora - timedelta(minutes=10)))
+    if not recente:
+        registrar_acesso(db, usuario, LEITURA_DO_REGISTRO)
+
+
+def apagar_acessos_vencidos(db: Session, agora: datetime) -> int:
+    """Cartão C20: linha do registro de acessos com mais de um ano é apagada, de todas as promotorias."""
+    apagadas = db.execute(delete(Acesso).where(
+        Acesso.quando <= agora - timedelta(days=GUARDA_DOS_ACESSOS_DIAS))).rowcount
+    db.commit()
+    if apagadas:
+        _registro.info("registro de acessos: %d linha(s) apagada(s) por prazo", apagadas)
+    return apagadas
 
 
 def escrevendo(processo: Processo) -> bool:
@@ -173,7 +256,8 @@ def conferir_escrita(db: Session, processo: Processo) -> None:
 def pedir_escrita(db: Session, processo: Processo, usuario: Usuario, motor: Motor, ficticio: bool,
                   confirmado: bool = False, versao: int | None = None) -> TarefaMinuta:
     """Marca que a minuta deste processo está sendo escrita pelo motor e registra o pedido em nome de quem pediu.
-    Os limites são por pessoa. Levanta `EscritaRecusada` com a orientação."""
+    Promotor e assessor pedem; o limite por hora e por dia é da promotoria inteira (cartão C21): mais gente na
+    mesa não aumenta o que sai para o serviço de IA. Levanta `EscritaRecusada` com a orientação."""
     if processo.promotoria_id != usuario.promotoria_id:   # a rota já filtra; aqui é a segunda barreira
         raise EscritaRecusada("processo de outra promotoria")
     if not motor.usa_autos:
@@ -207,11 +291,12 @@ def pedir_escrita(db: Session, processo: Processo, usuario: Usuario, motor: Moto
             raise EscritaRecusada("já há uma minuta sua sendo escrita; espere terminar")
         if db.scalar(em_curso) >= ESCRITAS_AO_MESMO_TEMPO:
             raise EscritaRecusada("o servidor está escrevendo outras minutas; tente de novo em instantes")
-        feitos = select(func.count()).select_from(PedidoIA).where(PedidoIA.usuario_id == usuario.id)
+        feitos = select(func.count()).select_from(PedidoIA).join(Processo, Processo.id == PedidoIA.processo_id) \
+            .where(Processo.promotoria_id == processo.promotoria_id)
         if db.scalar(feitos.where(PedidoIA.feito_em > agora - timedelta(hours=1))) >= ESCRITAS_POR_HORA:
-            raise EscritaRecusada("você chegou ao limite de pedidos por hora; tente mais tarde")
+            raise EscritaRecusada("a promotoria chegou ao limite de pedidos por hora; tente mais tarde")
         if db.scalar(feitos.where(PedidoIA.feito_em > agora - timedelta(days=1))) >= ESCRITAS_POR_DIA:
-            raise EscritaRecusada("você chegou ao limite de pedidos por dia; tente amanhã")
+            raise EscritaRecusada("a promotoria chegou ao limite de pedidos por dia; tente amanhã")
         if processo.tarefa:
             db.delete(processo.tarefa)
             db.flush()

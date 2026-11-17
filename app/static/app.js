@@ -192,6 +192,10 @@
     });
   }
 
+  // no celular o menu pode rolar de lado: a aba da tela aberta vem para a vista
+  document.querySelector('nav[aria-label="Principal"] [aria-current="page"]')
+    ?.scrollIntoView({ inline: "nearest", block: "nearest" });
+
   const copiarConflito = document.getElementById("copiar-conflito");
   copiarConflito?.addEventListener("click", async () => {
     const original = copiarConflito.textContent;

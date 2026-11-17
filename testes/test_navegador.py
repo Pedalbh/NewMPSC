@@ -531,5 +531,26 @@ def test_espaco_da_promotoria(endereco_promotoria, pagina):
     sync_api.expect(de_caio.locator("#meu-papel")).to_have_text("Prepara as minutas")
     sync_api.expect(de_caio.locator("#minha-promotoria")).to_have_text(PROMOTORIA)
     foto(de_caio, "25-promotoria-seus-dados")
+    # o registro de acessos: só a promotora vê, com o que cada um fez (cartão C20)
+    assert de_caio.get_by_role("link", name="Registro").count() == 0
+    de_ana.get_by_role("link", name="Registro", exact=True).click()
+    registro = de_ana.locator(".registro").first
+    sync_api.expect(registro).to_contain_text("Caio Exemplo editou a minuta")
+    sync_api.expect(registro).to_contain_text("Ana Exemplo enviou ao SIG")
+    sync_api.expect(de_ana.get_by_role("heading", name="Hoje")).to_be_visible()
+    foto(de_ana, "26-promotoria-registro")
+    for largura in (390, 320):   # com quatro abas, a da tela aberta fica à vista, e a página não rola de lado
+        de_ana.set_viewport_size({"width": largura, "height": 800})
+        de_ana.reload()
+        assert de_ana.evaluate("document.documentElement.scrollWidth") <= largura
+        sync_api.expect(de_ana.locator(".aba[aria-current]")).to_be_in_viewport(ratio=1)
+    assert de_ana.locator(".aba[aria-current]").evaluate("e => e.getBoundingClientRect().height") >= 44
+    de_ana.set_viewport_size({"width": 390, "height": 800})
+    foto(de_ana, "26b-promotoria-registro-celular")
+    de_ana.emulate_media(color_scheme="dark")
+    de_ana.wait_for_timeout(300)
+    foto(de_ana, "26c-promotoria-registro-celular-escuro")
+    de_ana.emulate_media(color_scheme="light")
+    de_ana.set_viewport_size({"width": 1360, "height": 900})
     assert not erros and not de_ana.erros
     contexto.close()

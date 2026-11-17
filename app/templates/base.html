@@ -21,6 +21,7 @@
       <a class="aba" href="/" {% if pagina == 'processos' %}aria-current="page"{% endif %}>Processos</a>
       <a class="aba" href="/audiencias" {% if pagina == 'audiencias' %}aria-current="page"{% endif %}>Audiências</a>
       {% if sig_direto %}<a class="aba" href="/sig-simulado" {% if pagina == 'sig' %}aria-current="page"{% endif %}>SIG simulado</a>{% endif %}
+      {% if usuario.papel == 'promotor' %}<a class="aba" href="/registro" {% if pagina == 'registro' %}aria-current="page"{% endif %}>Registro</a>{% endif %}
     </nav>
     <div class="conta">
       <a class="conta-nome" href="/configuracoes" {% if pagina == 'configuracoes' %}aria-current="page"{% endif %}>

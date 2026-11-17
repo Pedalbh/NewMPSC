@@ -403,3 +403,135 @@ def test_linha_de_comando_cria_move_desliga_e_lista(tmp_path, monkeypatch, capsy
     assert "administração: saiu (movido)" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="não há promotoria"):
         cli.main(["acessos", "Inexistente"])
+
+
+def test_so_o_promotor_le_o_registro_e_so_o_da_sua_promotoria(entrar, banco, pessoas):
+    """Cartão C20, com o teste de isolamento que o limite 3 exige."""
+    ana, caio, bruno = entrar("ana"), entrar("caio"), entrar("bruno")
+    caio.enviar("/processos/buscar")
+    caio.get("/processos/1")
+    bruno.enviar("/processos/colar", {"numeros": "0000301-00.2026.8.24.0000"})
+    bruno.get("/processos/10")
+    html = ana.get("/registro").text
+    assert ">Registro</a>" in html and "Caio Exemplo</strong> abriu" in html and NUMERO in html
+    assert "Bruno Exemplo" not in html and "0000301" not in html   # nada da outra promotoria
+    de_bruno = bruno.get("/registro").text
+    assert "Bruno Exemplo</strong> abriu" in de_bruno and "Caio Exemplo" not in de_bruno and NUMERO not in de_bruno
+    # o assessor não lê, e a aba nem aparece para ele; a tentativa fica anotada
+    r = caio.get("/registro")
+    assert r.status_code == 403 and "Só o promotor lê o registro" in r.text
+    assert ">Registro</a>" not in caio.get("/").text
+    acoes = [x.acao for x in servicos.acessos_da_promotoria(banco, pessoas["ana"].promotoria_id)]
+    assert "negado: ler o registro" in acoes and acoes.count("abriu o registro de acessos") == 1
+    # processo apagado: a linha fica, sem número; e a página seguinte não mostra o que já foi visto
+    assert servicos.apagar_processo(banco, pessoas["ana"], NUMERO)
+    assert "Processo apagado" in ana.get("/registro").text
+    ultima = servicos.acessos_da_promotoria(banco, pessoas["ana"].promotoria_id)[-1].id
+    assert "Nada registrado antes disso" in ana.get(f"/registro?antes={ultima}").text
+
+
+def test_linha_do_registro_com_mais_de_um_ano_e_apagada_e_a_recente_fica(entrar, banco, pessoas):
+    from datetime import datetime, timedelta
+    ana = entrar("ana")
+    ana.enviar("/processos/buscar")
+    velha = Acesso(usuario_id=pessoas["ana"].id, promotoria_id=pessoas["ana"].promotoria_id, acao="abriu",
+                   quando=datetime.now() - timedelta(days=400))
+    banco.add(velha)
+    banco.commit()
+    total = banco.query(Acesso).count()
+    assert servicos.apagar_acessos_vencidos(banco, datetime.now()) == 1
+    assert banco.query(Acesso).count() == total - 1
+    # o prazo vale também para quem escreve direto no banco: linha recente não sai, nem com relógio adiantado
+    with pytest.raises(Exception, match="só acrescenta"):
+        servicos.apagar_acessos_vencidos(banco, datetime.now() + timedelta(days=800))
+    banco.rollback()
+    assert banco.query(Acesso).count() == total - 1
+
+
+def test_o_limite_de_pedidos_a_ia_e_da_promotoria(banco, pessoas, monkeypatch):
+    """Cartão C21: promotor e assessor pedem; mais gente na mesa não aumenta o que sai para o serviço de IA."""
+    motor = type("M", (), {"usa_autos": True, "nome": "ia"})()
+    leitura = type("L", (), {"sha256": "0" * 64, "paginas": [f"Autos {NUMERO}"], "sem_texto": 0, "caracteres": 30})()
+    monkeypatch.setattr(servicos, "ESCRITAS_POR_HORA", 2)
+    numeros = [f"000040{i}-00.2026.8.24.0000" for i in range(3)]
+    servicos.colar_numeros(banco, pessoas["ana"], " ".join(numeros), motor, True)
+    servicos.colar_numeros(banco, pessoas["bruno"], numeros[0], motor, True)
+    da_pj = banco.query(Processo).filter_by(promotoria_id=pessoas["ana"].promotoria_id).order_by(Processo.id).all()
+    de_fora = banco.query(Processo).filter_by(promotoria_id=pessoas["bruno"].promotoria_id).one()
+    for p in [*da_pj, de_fora]:
+        servicos.juntar_autos(banco, p, "a.pdf", leitura, True, b"k" * 32)
+
+    def pedir(processo, quem):
+        tarefa = servicos.pedir_escrita(banco, processo, pessoas[quem], motor, True)
+        servicos._fechar_escrita(banco, processo.id, tarefa.chave, "falhou", "x", None, None)
+
+    pedir(da_pj[0], "ana")
+    pedir(da_pj[1], "caio")
+    with pytest.raises(servicos.EscritaRecusada, match="a promotoria chegou ao limite de pedidos por hora"):
+        pedir(da_pj[2], "caio")   # o terceiro pedido da mesa, de quem for
+    pedir(de_fora, "bruno")       # o limite de uma promotoria não gasta o da outra
+
+
+def test_toda_leitura_do_registro_fica_anotada_e_a_tela_le_como_frase(entrar, banco, pessoas):
+    """Achados dos pareceres do C20: com `antes` a leitura não deixava rastro; `antes` enorme dava erro 500;
+    as ações saíam em jargão; entrada e saída mostravam o horário de trabalho do colega."""
+    from datetime import datetime, timedelta
+    ana, caio = entrar("ana"), entrar("caio")
+    caio.enviar("/processos/buscar")
+    for _ in range(3):
+        caio.get("/processos/1")
+    caio.enviar("/processos/1/entregar")
+    lidas = lambda: banco.query(Acesso).filter_by(acao=servicos.LEITURA_DO_REGISTRO).count()   # noqa: E731
+    assert ana.get("/registro?antes=2147483647").status_code == 200 and lidas() == 1
+    ana.get("/registro")
+    assert lidas() == 1   # dez minutos de leitura viram uma linha só
+    banco.add(Acesso(usuario_id=pessoas["ana"].id, promotoria_id=pessoas["ana"].promotoria_id, acao="abriu",
+                     quando=datetime.now() - timedelta(days=2)))
+    banco.commit()
+    for errado in ("99999999999999999999999", "0", "-1", "abc"):
+        assert ana.get(f"/registro?antes={errado}").status_code == 422
+    html = ana.get("/registro").text
+    assert "tentou enviar ao SIG" in html and "Barrado" in html and "negado:" not in html
+    assert "entrou na promotoria, para preparar minutas" in html and "administração:" not in html
+    assert "· 3 vezes" in html and html.count("Caio Exemplo</strong> abriu") == 1
+    assert ">Hoje</h2>" in html and (datetime.now() - timedelta(days=2)).strftime("%d/%m/%Y</h2>") in html
+    # entrada e saída ficam gravadas, mas não aparecem para o promotor
+    assert banco.query(Acesso).filter_by(acao="entrou").count() == 2
+    assert "</strong> entrou<" not in html.replace(" <", "<") and "Ver as anteriores" not in html
+    assert "Ver as mais recentes" in ana.get("/registro?antes=5").text
+
+
+def test_com_cem_linhas_exatas_nao_ha_pagina_seguinte_vazia(banco, pessoas):
+    for _ in range(100):
+        banco.add(Acesso(usuario_id=pessoas["ana"].id, promotoria_id=pessoas["bruno"].promotoria_id, acao="abriu"))
+    banco.commit()
+    ja = banco.query(Acesso).filter(Acesso.promotoria_id == pessoas["bruno"].promotoria_id,
+                                    Acesso.acao.not_in(servicos.FORA_DA_TELA)).count()
+    _, mais = servicos.registro_para_o_promotor(banco, pessoas["bruno"], ja)
+    assert mais is None
+    _, mais = servicos.registro_para_o_promotor(banco, pessoas["bruno"], ja - 1)
+    assert mais is not None
+
+
+def test_limpeza_na_fronteira_do_prazo_e_gatilho_com_dois_processos_subindo(tmp_path):
+    """Achados do parecer de qualidade: uma linha vencendo naquele segundo travava a limpeza inteira, e dois
+    processos chamando `criar_banco` juntos falhavam ao recriar o gatilho."""
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import datetime, timedelta
+    url = f"sqlite:///{tmp_path / 'registro.db'}"
+    _, Sessao = criar_banco(url, b"k" * 32)
+    with ThreadPoolExecutor(8) as varios:
+        list(varios.map(lambda _: criar_banco(url, b"k" * 32), range(24)))
+    agora = datetime.now()
+    with Sessao() as db:
+        for dias in (500, 365, 364, 1):
+            db.add(Acesso(usuario_id=1, promotoria_id=1, acao="abriu", quando=agora - timedelta(days=dias)))
+        db.commit()
+        assert servicos.apagar_acessos_vencidos(db, agora) == 2   # 500 e 365 dias; a de 364 ainda não venceu
+        assert db.query(Acesso).count() == 2
+        with pytest.raises(Exception, match="só acrescenta"):
+            db.execute(text("DELETE FROM acessos"))
+        db.rollback()
+    with create_engine(url).connect() as c:
+        gatilhos = set(c.execute(text("SELECT name FROM sqlite_master WHERE type = 'trigger'")).scalars())
+    assert gatilhos == {"acessos_sem_update", "acessos_so_sai_vencido"}

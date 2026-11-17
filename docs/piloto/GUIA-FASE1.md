@@ -27,7 +27,7 @@ Uma mesa única: a fila de processos por prioridade, a minuta de cada um e a pau
 - O assessor prepara a minuta. Só o promotor envia ao SIG.
 - A fila e a tela do processo mostram quem alterou a minuta por último.
 - Se duas pessoas mexerem ao mesmo tempo, quem salvar depois recebe um aviso: copie o seu texto e carregue a versão nova.
-- A aplicação anota quem abriu, editou, baixou e enviou cada processo, e quando.
+- A aplicação anota quem abriu, editou, baixou e enviou cada processo, e quando. O promotor vê isso na aba "Registro"; cada linha fica por um ano.
 
 ## O que a aplicação não faz
 - Não assina e não protocola.
