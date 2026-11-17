@@ -2,7 +2,7 @@
 
 Cada decisão que é do titular vira um cartão aqui. O resto o coordenador decide e segue, deixando registrado no PR. A régua está no `CLAUDE.md`.
 
-Como responder: diga na conversa o número do cartão e a opção (por exemplo, "C1: A"). A resposta já é a ordem de execução: o coordenador registra a decisão aqui, com a data, e executa na hora o que está em **Depois da decisão** da opção escolhida, sem nova pergunta. O caminho é o de sempre: ramo, PR com testes, revisores do nível da tarefa, CI verde, merge.
+Como responder: na página de cartões, ou na conversa, com o número do cartão e a opção (por exemplo, "C1: A"). A resposta já é a ordem de execução: o coordenador registra a decisão aqui, com a data, e executa na hora o que está em **Depois da decisão** da opção escolhida, sem nova pergunta. O caminho é o de sempre: ramo, PR com testes, revisores do nível da tarefa, CI verde, merge.
 
 O coordenador só volta a perguntar se, durante a execução, aparecer fato novo que mude o efeito descrito na opção (isso vira cartão novo, e o resto da execução segue). Passo que só o titular pode dar (chave de API, contrato, conversa institucional) fica listado em **O que você faz**; o coordenador executa tudo o que não depende dele.
 
@@ -10,7 +10,7 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 - **Título:** a pergunta numa frase.
 - **Por que é sua:** qual item da régua do `CLAUDE.md` o traz para cá.
 - **Hoje** ou **Contexto:** como está agora e o que se sabe.
-- **Opções:** cada uma com o efeito e, logo abaixo, **Depois da decisão:** o que o coordenador executa sozinho se ela for escolhida.
+- **Opções:** cada uma com o efeito e, logo abaixo, **Depois da decisão:** o que o coordenador executa sozinho se ela for escolhida. A última é sempre **Outro**: o titular escreve o que prefere.
 - **Recomendo:** a opção e o porquê, numa linha.
 - **O que espera:** o que fica parado sem resposta.
 - **O que você faz** (só quando há): passo que só o titular pode dar.
@@ -31,6 +31,8 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
     **Depois da decisão:** o coordenador escreve os requisitos para a TI; a Fase 1 espera a resposta dela.
   - **D. Sem servidor.** O ensaio acontece em sessões guiadas, com a aplicação no computador de quem conduz, por compartilhamento de tela. Nenhum dado de participante sai desse computador.
     **Depois da decisão:** o coordenador adapta o roteiro para sessão guiada. O portão "cada participante faz o roteiro sem ajuda" fica mais fraco e é reescrito.
+  - **E. Outro.** Você escreve o que prefere.
+    **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
 - **Recomendo:** A. Começa em dias, não envolve processo real nem IA, e o custo é o de um servidor pequeno por um mês. O preço é guardar, fora da instituição e por um mês, nome e e-mail de até nove pessoas, o que o termo passa a dizer.
 - **O que espera:** o começo da Fase 1 com os participantes. Roteiro, guia e termo já estão em `docs/piloto/`.
 - **O que você faz:** contratar o serviço escolhido (opções A e B) ou levar o pedido à TI (opção C).
@@ -47,6 +49,8 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
     **Depois da decisão:** o coordenador leva a pergunta à pauta da Fase 0 e constrói o acesso quando houver a indicação; até lá vale a opção B.
   - **D. Deixar tudo para o parecer do encarregado.** Fica como está até a Fase 0.
     **Depois da decisão:** nada muda no código; a pergunta entra na pauta do encarregado.
+  - **E. Outro.** Você escreve o que prefere.
+    **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
 - **Recomendo:** B agora, com a pergunta da opção C levada ao encarregado. O registro ainda é novo e serve para apurar incidente; dar ao promotor a leitura do horário de cada assessor é passo que merece o parecer antes. O prazo de um ano é proposta: não foi conferido na tabela de temporalidade do MPSC nem em ato do CNMP.
 - **O que espera:** o texto final do termo dos participantes (já diz que o registro existe). Precisa estar decidido antes do primeiro dado real (Fase 2).
 
@@ -60,6 +64,8 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
     **Depois da decisão:** o coordenador restringe o pedido ao promotor (no serviço e na tela) e ajusta o guia.
   - **C. Deixar como está até o contrato da Fase 3.**
     **Depois da decisão:** nada muda; o ponto entra na pauta do contrato e do parecer (C4).
+  - **D. Outro.** Você escreve o que prefere.
+    **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
 - **Recomendo:** A. O ganho do assessor está em entregar a minuta já com o relatório; o que precisa de trava é o volume, não a pessoa.
 - **O que espera:** nada no ensaio. Precisa estar decidido antes da Fase 3.
 
