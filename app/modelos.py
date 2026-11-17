@@ -24,6 +24,7 @@ class Base(DeclarativeBase):
     pass
 
 
+GUARDA_DOS_ACESSOS_DIAS = 365   # cartão C20: depois disso a linha do registro de acessos é apagada
 PAPEIS = ("promotor", "assessor")   # só o promotor envia ao SIG; os dois veem e editam a mesa da promotoria
 
 
@@ -215,12 +216,17 @@ def criar_banco(url: str, chave_impressao: bytes | None = None):
     Base.metadata.create_all(motor)
     _atualizar(motor, chave_impressao)
     if url.startswith("sqlite"):
-        # o registro de acessos só acrescenta, também para quem escreve direto no banco
+        # o registro de acessos só acrescenta, também para quem escreve direto no banco. A única saída é a
+        # limpeza por prazo (cartão C20): linha com mais de um ano pode ser apagada; alterada, nunca.
         with motor.begin() as conexao:
-            for verbo in ("UPDATE", "DELETE"):
-                conexao.execute(text(
-                    f"CREATE TRIGGER IF NOT EXISTS acessos_sem_{verbo.lower()} BEFORE {verbo} ON acessos "   # noqa: S608
-                    "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
+            conexao.execute(text("DROP TRIGGER IF EXISTS acessos_sem_delete"))   # a versão 0.6.0 não tinha o prazo
+            conexao.execute(text(
+                "CREATE TRIGGER IF NOT EXISTS acessos_sem_update BEFORE UPDATE ON acessos "
+                "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
+            conexao.execute(text(
+                "CREATE TRIGGER acessos_sem_delete BEFORE DELETE ON acessos "
+                f"WHEN OLD.quando > datetime('now', 'localtime', '-{GUARDA_DOS_ACESSOS_DIAS} days') "   # noqa: S608
+                "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
     return motor, sessionmaker(bind=motor, expire_on_commit=False)
 
 

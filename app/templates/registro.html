@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block titulo %}Registro · NewMPSC{% endblock %}
+{% block classe_main %}estreito{% endblock %}
+{% block conteudo %}
+<section class="saudacao">
+  <h1>Registro de acessos</h1>
+  <p class="fraco">Quem fez o quê na mesa de {{ usuario.espaco.nome }}. Só você, como promotor, vê esta tela. Cada linha fica por um ano.</p>
+</section>
+<section class="cartao" aria-label="Registro de acessos">
+  {% if linhas %}
+  <ul class="registro" id="registro">
+    {% for l in linhas %}
+    <li>
+      <span class="registro-quando fraco pequeno">{{ l.quando | data }} {{ l.quando | hora }}</span>
+      <span class="registro-oque"><strong>{{ l.quem }}</strong> {{ l.acao }}{% if l.processo %} <span class="num">{{ l.processo }}</span>{% endif %}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% if mais %}<a class="btn largo" href="/registro?antes={{ mais }}" id="registro-mais">Ver as anteriores</a>{% endif %}
+  {% else %}
+  <p class="fraco">Nada registrado{{ ' antes disso' if request.query_params.get('antes') }}.</p>
+  {% endif %}
+</section>
+{% endblock %}

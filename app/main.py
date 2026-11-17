@@ -72,6 +72,7 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         try:
             with Sessao() as db:
                 servicos.apagar_autos_vencidos(db, agora())
+                servicos.apagar_acessos_vencidos(db, agora())
         except Exception:   # a limpeza não derruba a partida nem a requisição; tenta de novo na próxima hora
             logging.getLogger("newmpsc").exception("guarda dos autos: a limpeza falhou")
 
@@ -570,6 +571,20 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         _sem_escrita_em_curso(p)
         servicos.registrar_acesso(db, usuario, "copiou a minuta", p)
         return PlainTextResponse(documento.texto_simples(p.minuta.blocos))
+
+    # ------------------------------------------------------------------ registro de acessos
+    @app.get("/registro", response_class=HTMLResponse)
+    def registro(request: Request, antes: int | None = None, usuario=Depends(usuario_atual), db=Depends(banco)):
+        """Cartão C20: o promotor lê quem fez o quê na mesa da sua promotoria. Só leitura."""
+        try:
+            linhas = servicos.registro_para_o_promotor(db, usuario, 100, antes)
+        except servicos.SoPromotor as e:
+            servicos.registrar_acesso(db, usuario, "negado: ler o registro")
+            raise HTTPException(403, _frase(e)) from None
+        if antes is None:   # folhear as páginas seguintes não repete a linha
+            servicos.registrar_acesso(db, usuario, "abriu o registro de acessos")
+        return tela(request, "registro.html", usuario=usuario, pagina="registro", linhas=linhas,
+                    mais=linhas[-1].id if len(linhas) == 100 else None, dias=servicos.GUARDA_DOS_ACESSOS_DIAS)
 
     # ------------------------------------------------------------------ audiências
     @app.get("/audiencias", response_class=HTMLResponse)

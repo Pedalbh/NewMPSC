@@ -192,6 +192,11 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .folha .b-titulo { font-weight: 700; text-align: center; }
 .folha .b-centro { text-align: center; margin-top: 2em; }
 .folha .b-direita { text-align: right; }
+.registro { display: flex; flex-direction: column; }
+.registro li { display: flex; flex-wrap: wrap; gap: 2px var(--e3); padding: 10px 0; border-top: 1px solid var(--linha); }
+.registro li:first-child { border-top: 0; padding-top: 0; }
+.registro-quando { flex: none; min-width: 124px; font-variant-numeric: tabular-nums; }
+.registro-oque { min-width: 0; overflow-wrap: anywhere; }
 .dados { display: flex; flex-direction: column; }
 .dados > div { display: flex; justify-content: space-between; gap: var(--e3); padding: 8px 0; border-top: 1px solid var(--linha); }
 .dados > div:first-child { border-top: 0; padding-top: 0; }
@@ -204,6 +209,9 @@ ul.lista { list-style: disc; } ol.lista { list-style: decimal; }
 @media (max-width: 720px) {
   .so-largo { display: none; }
   .topo-dentro { gap: var(--e3); padding-inline: var(--e4); }
+  /* com quatro abas o menu não cabe ao lado da marca: desce para uma linha só dele, e rola de lado se precisar */
+  nav[aria-label="Principal"] { order: 3; flex: 1 0 100%; overflow-x: auto; }
+  .aba { padding: 0 12px; white-space: nowrap; }
   main { padding: var(--e5) var(--e4) var(--e6); }
   h1 { font-size: 24px; line-height: 32px; }
   .folha { padding: 32px 20px; }

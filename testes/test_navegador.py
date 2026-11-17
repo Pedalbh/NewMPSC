@@ -531,5 +531,15 @@ def test_espaco_da_promotoria(endereco_promotoria, pagina):
     sync_api.expect(de_caio.locator("#meu-papel")).to_have_text("Prepara as minutas")
     sync_api.expect(de_caio.locator("#minha-promotoria")).to_have_text(PROMOTORIA)
     foto(de_caio, "25-promotoria-seus-dados")
+    # o registro de acessos: só a promotora vê, com o que cada um fez (cartão C20)
+    assert de_caio.get_by_role("link", name="Registro").count() == 0
+    de_ana.get_by_role("link", name="Registro", exact=True).click()
+    sync_api.expect(de_ana.locator("#registro")).to_contain_text("Caio Exemplo editou a minuta")
+    sync_api.expect(de_ana.locator("#registro")).to_contain_text("Ana Exemplo enviou ao SIG")
+    foto(de_ana, "26-promotoria-registro")
+    de_ana.set_viewport_size({"width": 390, "height": 800})
+    assert de_ana.evaluate("document.documentElement.scrollWidth") <= 390
+    foto(de_ana, "26b-promotoria-registro-celular")
+    de_ana.set_viewport_size({"width": 1360, "height": 900})
     assert not erros and not de_ana.erros
     contexto.close()

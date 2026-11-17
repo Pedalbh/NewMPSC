@@ -403,3 +403,70 @@ def test_linha_de_comando_cria_move_desliga_e_lista(tmp_path, monkeypatch, capsy
     assert "administração: saiu (movido)" in capsys.readouterr().out
     with pytest.raises(SystemExit, match="não há promotoria"):
         cli.main(["acessos", "Inexistente"])
+
+
+def test_so_o_promotor_le_o_registro_e_so_o_da_sua_promotoria(entrar, banco, pessoas):
+    """Cartão C20, com o teste de isolamento que o limite 3 exige."""
+    ana, caio, bruno = entrar("ana"), entrar("caio"), entrar("bruno")
+    caio.enviar("/processos/buscar")
+    caio.get("/processos/1")
+    bruno.enviar("/processos/colar", {"numeros": "0000301-00.2026.8.24.0000"})
+    bruno.get("/processos/10")
+    html = ana.get("/registro").text
+    assert ">Registro</a>" in html and "Caio Exemplo</strong> abriu" in html and NUMERO in html
+    assert "Bruno Exemplo" not in html and "0000301" not in html   # nada da outra promotoria
+    de_bruno = bruno.get("/registro").text
+    assert "Bruno Exemplo</strong> abriu" in de_bruno and "Caio Exemplo" not in de_bruno and NUMERO not in de_bruno
+    # o assessor não lê, e a aba nem aparece para ele; a tentativa fica anotada
+    r = caio.get("/registro")
+    assert r.status_code == 403 and "Só o promotor lê o registro" in r.text
+    assert ">Registro</a>" not in caio.get("/").text
+    acoes = [x.acao for x in servicos.acessos_da_promotoria(banco, pessoas["ana"].promotoria_id)]
+    assert "negado: ler o registro" in acoes and acoes.count("abriu o registro de acessos") == 1
+    # processo apagado: a linha fica, sem número; e a página seguinte não mostra o que já foi visto
+    assert servicos.apagar_processo(banco, pessoas["ana"], NUMERO)
+    assert "Processo apagado" in ana.get("/registro").text
+    ultima = servicos.acessos_da_promotoria(banco, pessoas["ana"].promotoria_id)[-1].id
+    assert "Nada registrado antes disso" in ana.get(f"/registro?antes={ultima}").text
+
+
+def test_linha_do_registro_com_mais_de_um_ano_e_apagada_e_a_recente_fica(entrar, banco, pessoas):
+    from datetime import datetime, timedelta
+    ana = entrar("ana")
+    ana.enviar("/processos/buscar")
+    velha = Acesso(usuario_id=pessoas["ana"].id, promotoria_id=pessoas["ana"].promotoria_id, acao="abriu",
+                   quando=datetime.now() - timedelta(days=400))
+    banco.add(velha)
+    banco.commit()
+    total = banco.query(Acesso).count()
+    assert servicos.apagar_acessos_vencidos(banco, datetime.now()) == 1
+    assert banco.query(Acesso).count() == total - 1
+    # o prazo vale também para quem escreve direto no banco: linha recente não sai, nem com relógio adiantado
+    with pytest.raises(Exception, match="só acrescenta"):
+        servicos.apagar_acessos_vencidos(banco, datetime.now() + timedelta(days=800))
+    banco.rollback()
+    assert banco.query(Acesso).count() == total - 1
+
+
+def test_o_limite_de_pedidos_a_ia_e_da_promotoria(banco, pessoas, monkeypatch):
+    """Cartão C21: promotor e assessor pedem; mais gente na mesa não aumenta o que sai para o serviço de IA."""
+    motor = type("M", (), {"usa_autos": True, "nome": "ia"})()
+    leitura = type("L", (), {"sha256": "0" * 64, "paginas": [f"Autos {NUMERO}"], "sem_texto": 0, "caracteres": 30})()
+    monkeypatch.setattr(servicos, "ESCRITAS_POR_HORA", 2)
+    numeros = [f"000040{i}-00.2026.8.24.0000" for i in range(3)]
+    servicos.colar_numeros(banco, pessoas["ana"], " ".join(numeros), motor, True)
+    servicos.colar_numeros(banco, pessoas["bruno"], numeros[0], motor, True)
+    da_pj = banco.query(Processo).filter_by(promotoria_id=pessoas["ana"].promotoria_id).order_by(Processo.id).all()
+    de_fora = banco.query(Processo).filter_by(promotoria_id=pessoas["bruno"].promotoria_id).one()
+    for p in [*da_pj, de_fora]:
+        servicos.juntar_autos(banco, p, "a.pdf", leitura, True, b"k" * 32)
+
+    def pedir(processo, quem):
+        tarefa = servicos.pedir_escrita(banco, processo, pessoas[quem], motor, True)
+        servicos._fechar_escrita(banco, processo.id, tarefa.chave, "falhou", "x", None, None)
+
+    pedir(da_pj[0], "ana")
+    pedir(da_pj[1], "caio")
+    with pytest.raises(servicos.EscritaRecusada, match="a promotoria chegou ao limite de pedidos por hora"):
+        pedir(da_pj[2], "caio")   # o terceiro pedido da mesa, de quem for
+    pedir(de_fora, "bruno")       # o limite de uma promotoria não gasta o da outra

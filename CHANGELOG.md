@@ -2,6 +2,16 @@
 
 Formato [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/); versões em [SemVer](https://semver.org/lang/pt-BR/).
 
+## [0.7.0] - 2026-11-17
+
+### Adicionado
+- Tela "Registro" (cartão C20): o promotor lê quem fez o quê na mesa da sua promotoria. O assessor não vê a tela. Cada linha fica por um ano e depois é apagada sozinha.
+- Cartão C22: com autos reais, onde o sistema roda.
+
+### Alterado
+- O limite de pedidos de relatório à IA passa a ser da promotoria, e não de cada pessoa (cartão C21): promotor e assessor pedem, e mais gente na mesa não aumenta o que sai.
+- Todo cartão traz uma última opção "Outro" e é publicado também na página de cartões.
+
 ## [0.6.0] - 2026-11-16
 
 ### Adicionado

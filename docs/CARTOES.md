@@ -17,57 +17,20 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 
 ## Abertos
 
-### C19 · Onde roda o ensaio da Fase 1, e a IA liga nele?
-- **Por que é sua:** contrato e dinheiro (hospedagem) e destino novo de dado.
-- **Contexto:** o C17 aprovou o piloto. A Fase 1 usa só processos fictícios, mas três promotorias precisam alcançar a aplicação, e hoje ela só roda no computador de quem desenvolve. Dois pontos pesam em qualquer opção:
-  - **O servidor guarda dado pessoal real dos participantes:** nome, e-mail, cargo, promotoria, a senha (cifrada) e os endereços de rede nos registros do servidor e do provedor.
-  - **A recusa de dado real é parcial.** A aplicação só aceita número de processo claramente fictício. Não examina o texto da minuta e não reconhece nome, documento nem PDF digitalizado: para isso existem o termo do participante e o comando que apaga o processo.
+### C22 · Com autos reais, onde o sistema roda?
+- **Por que é sua:** dado real e hospedagem. O limite 1 diz que dado real só entra depois de hospedagem e contrato institucionais.
+- **Contexto:** no C19 você respondeu que a IA fica como porta para depois e que os autos poderão ser reais. A aplicação já funciona sem IA (é o padrão) e com o SIG por planilha. Falta decidir onde ela roda quando o dado é real. Hoje o código recusa número de processo real em servidor de ensaio, e essa trava só sai por configuração de quem instala.
 - **Opções:**
-  - **A. Servidor pequeno contratado só para o ensaio, sem IA.** Motor de demonstração; nenhum texto sai do servidor. O contrato fica em seu nome, como pessoa, não da instituição. Quem opera (console e banco) é o coordenador, com a conta que você criar.
-    **Depois da decisão:** o coordenador prepara a receita de instalação (HTTPS, convite pela linha de comando) com parecer de segurança, e traz em cartão curto dois ou três serviços com preço, país e região, e como cada um apaga cópias e snapshots no fim, para você escolher e contratar.
-  - **B. O mesmo servidor, com o relatório por IA ligado sobre autos fictícios.** Os participantes veem o relatório no ensaio. Os dados do processo e o texto de cada página dos autos vão à API do Claude (Anthropic), processados fora do Brasil, pela sua chave pessoal (C8), sem contrato institucional. Um nome real que escape num PDF vai junto. Retenção e país: a conferir nos termos do fornecedor.
-    **Depois da decisão:** o mesmo da opção A, mais o motor de IA ligado com a sua chave e o teto de gasto no painel do fornecedor; a conferência dos termos do fornecedor volta a você antes de ligar.
-  - **C. Pedir à TI um servidor institucional já para o ensaio.** Demora mais, mas o dado dos participantes fica na instituição e a hospedagem da Fase 2 se adianta.
-    **Depois da decisão:** o coordenador escreve os requisitos para a TI; a Fase 1 espera a resposta dela.
-  - **D. Sem servidor.** O ensaio acontece em sessões guiadas, com a aplicação no computador de quem conduz, por compartilhamento de tela. Nenhum dado de participante sai desse computador.
-    **Depois da decisão:** o coordenador adapta o roteiro para sessão guiada. O portão "cada participante faz o roteiro sem ajuda" fica mais fraco e é reescrito.
-  - **E. Outro.** Você escreve o que prefere.
-    **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
-- **Recomendo:** A. Começa em dias, não envolve processo real nem IA, e o custo é o de um servidor pequeno por um mês. O preço é guardar, fora da instituição e por um mês, nome e e-mail de até nove pessoas, o que o termo passa a dizer.
-- **O que espera:** o começo da Fase 1 com os participantes. Roteiro, guia e termo já estão em `docs/piloto/`.
-- **O que você faz:** contratar o serviço escolhido (opções A e B) ou levar o pedido à TI (opção C).
-
-### C20 · Registro de acessos: quem pode ler, e por quanto tempo fica?
-- **Por que é sua:** dado e LGPD (prazo de guarda) e regras do projeto.
-- **Hoje:** desde a 0.6.0 a aplicação anota quem entrou, abriu, editou, baixou ou enviou cada processo, as tentativas negadas e os atos de quem administra, com data e hora. Não guarda conteúdo nem endereço de rede. Ninguém lê pela tela: só quem opera o servidor, pela linha de comando (hoje, o coordenador; não há hospedagem institucional). As linhas não têm prazo: ficam para sempre, mesmo depois de o processo ou a pessoa sair. O registro diz o que cada pessoa fez e a que horas, então é dado pessoal de quem trabalha, e isso já vale no ensaio da Fase 1.
-- **Opções:**
-  - **A. O promotor lê o da sua promotoria; guarda de 1 ano.** Uma tela simples, só para o promotor. Ele passa a ver a que horas cada assessor abriu e editou cada processo: é acompanhamento do trabalho de colega, e o termo dos participantes precisa dizer isso. Linhas com mais de um ano são apagadas sozinhas.
-    **Depois da decisão:** o coordenador constrói a tela e a limpeza, com teste de isolamento e os três revisores, e põe a leitura e o prazo no termo.
-  - **B. Só quem opera o servidor lê; guarda de 1 ano.** Sem tela. O registro serve para apurar incidente, a pedido seu ou do encarregado de dados.
-    **Depois da decisão:** o coordenador constrói só a limpeza e escreve quem pode pedir a consulta e como.
-  - **C. Leitura por órgão de controle.** O promotor não lê; quem lê é quem a instituição indicar (encarregado de dados, controle interno ou Corregedoria).
-    **Depois da decisão:** o coordenador leva a pergunta à pauta da Fase 0 e constrói o acesso quando houver a indicação; até lá vale a opção B.
-  - **D. Deixar tudo para o parecer do encarregado.** Fica como está até a Fase 0.
-    **Depois da decisão:** nada muda no código; a pergunta entra na pauta do encarregado.
-  - **E. Outro.** Você escreve o que prefere.
-    **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
-- **Recomendo:** B agora, com a pergunta da opção C levada ao encarregado. O registro ainda é novo e serve para apurar incidente; dar ao promotor a leitura do horário de cada assessor é passo que merece o parecer antes. O prazo de um ano é proposta: não foi conferido na tabela de temporalidade do MPSC nem em ato do CNMP.
-- **O que espera:** o texto final do termo dos participantes (já diz que o registro existe). Precisa estar decidido antes do primeiro dado real (Fase 2).
-
-### C21 · O assessor pode pedir o relatório à IA?
-- **Por que é sua:** dado e LGPD (quem manda texto de autos para fora) e dinheiro (cada pedido custa).
-- **Hoje:** o C18 reservou ao promotor só o que toca o SIG. Pedir o relatório à IA ficou aberto aos dois papéis: o pedido envia o texto dos autos ao fornecedor. Os limites contam por pessoa (20 por hora, 60 por dia), então uma promotoria com um promotor e dois assessores pode mandar o triplo. Hoje só há dados fictícios, e o motor de IA nem liga com dado real.
-- **Opções:**
-  - **A. Os dois pedem; o limite passa a ser da promotoria.** O assessor prepara a minuta inteira, com o relatório. O volume que sai fica igual ao de uma pessoa só.
-    **Depois da decisão:** o coordenador troca os limites por pessoa por limites por promotoria, com teste.
-  - **B. Só o promotor pede.** Texto de autos só sai por ato do promotor, como o envio ao SIG.
-    **Depois da decisão:** o coordenador restringe o pedido ao promotor (no serviço e na tela) e ajusta o guia.
-  - **C. Deixar como está até o contrato da Fase 3.**
-    **Depois da decisão:** nada muda; o ponto entra na pauta do contrato e do parecer (C4).
+  - **A. Só em servidor da instituição.** Você leva à TI o pedido de servidor; até lá, o ensaio segue com dados fictícios, em sessões guiadas.
+    **Depois da decisão:** o coordenador escreve os requisitos de hospedagem para a TI e segue nos itens de segurança que faltam antes do primeiro dado real (lista em `docs/PILOTO.md`).
+  - **B. No computador de trabalho de cada promotoria, sem servidor.** O dado real não sai da máquina institucional. Promotor e assessor só compartilham a mesa se usarem a mesma máquina, e não há cópia de segurança central.
+    **Depois da decisão:** o coordenador prepara um instalador simples e o guia, com parecer de segurança, e traz em cartão o que muda no plano do piloto.
+  - **C. Em servidor contratado por você, já com dado real.** Mais rápido, mas põe dado de processo fora da instituição, sem contrato institucional nem parecer do encarregado. Exige mudar o limite 1.
+    **Depois da decisão:** o coordenador muda o limite 1 no `CLAUDE.md` e traz em cartão os serviços, com preço, país e contrato.
   - **D. Outro.** Você escreve o que prefere.
     **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
-- **Recomendo:** A. O ganho do assessor está em entregar a minuta já com o relatório; o que precisa de trava é o volume, não a pessoa.
-- **O que espera:** nada no ensaio. Precisa estar decidido antes da Fase 3.
+- **Recomendo:** A. É o único caminho que serve a várias promotorias sem tirar dado de processo da instituição. A opção B serve de ponte se a TI demorar.
+- **O que espera:** qualquer uso com autos reais. O desenvolvimento segue com dados fictícios.
 
 ## Decididos
 
@@ -98,3 +61,6 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho | A: sim, só rascunho, por ato do usuário, pela integração oficial | 16/11/2026 | limite 2 ajustado no `CLAUDE.md`; pedido em `docs/PEDIDO-TI.md`, para o titular levar à TI |
 | C17 · O piloto: quais promotorias, e quando o plano vai à Administração | A: plano aprovado com três promotorias | 16/11/2026 | roteiro, guia e termo em `docs/piloto/`; recusa de número real na planilha, na colagem e na pauta; servidor de ensaio virou o C19; itens da Fase 2 em construção, a começar pelo espaço da promotoria |
 | C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | feito na 0.6.0: espaço, papéis, registro de acessos, regra de saída e passagem do que era de cada conta; limite 3 ajustado no `CLAUDE.md`. Quem lê o registro e por quanto tempo fica virou o C20; se o assessor pede relatório à IA virou o C21 |
+| C19 · Onde roda o ensaio da Fase 1, e a IA liga nele | Outro: "a utilização de IA seja uma porta a ser utilizada no futuro (provavelmente via API). Os autos poderão ser reais, não apenas fictícios. O ideal é ter um sistema programado, escalável, que consiga fazer esse envelopamento do SIG" | 17/11/2026 | sem IA por ora: já é o padrão, e o motor fica atrás da porta de `app/portas.py`; onde o sistema roda com autos reais muda o efeito do cartão e virou o C22 |
+| C20 · Registro de acessos: quem pode ler, e por quanto tempo fica | A, com observação: o promotor lê o da sua promotoria; guarda de 1 ano; sem acréscimo no termo ("tudo será institucional no final") | 17/11/2026 | feito na 0.7.0: tela "Registro" e limpeza por prazo |
+| C21 · O assessor pode pedir o relatório à IA | A, com observação: os dois pedem; limite da promotoria; "isso é para o futuro" | 17/11/2026 | feito na 0.7.0: o limite de pedidos passou a contar por promotoria |
