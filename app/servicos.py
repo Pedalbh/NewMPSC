@@ -159,28 +159,70 @@ def acessos_da_promotoria(db: Session, promotoria_id: int, limite: int = 200, an
 
 @dataclass
 class LinhaDoRegistro:
-    id: int
     quando: datetime
     quem: str
-    acao: str
+    frase: str      # a ação, escrita para ler depois do nome
     processo: str   # o número, se o processo ainda existe nesta promotoria
+    barrado: bool   # tentativa que a aplicação recusou
+    vezes: int = 1  # repetições seguidas da mesma pessoa, ação e processo, juntas numa linha
+
+
+# o que fica gravado é curto e estável; a tela escreve como frase (parecer de design do C20)
+_FRASES = {
+    "negado: enviar ao SIG": "tentou enviar ao SIG",
+    "negado: tirar do SIG": "tentou tirar o rascunho do SIG",
+    "negado: processo de fora": "tentou abrir processo de outra promotoria",
+    "negado: audiência de fora": "tentou abrir audiência de outra promotoria",
+    "negado: ler o registro": "tentou ler o registro de acessos",
+    "administração: entrou como promotor": "entrou na promotoria, para enviar ao SIG",
+    "administração: entrou como assessor": "entrou na promotoria, para preparar minutas",
+    "administração: saiu (movido)": "saiu da promotoria (transferência)",
+    "administração: desligado": "saiu da promotoria (desligamento)",
+}
+# entrada e saída da aplicação ficam gravadas para apurar incidente, mas não aparecem para o promotor: o
+# cartão C20 fala em quem mexeu em cada processo, não em horário de trabalho de colega
+FORA_DA_TELA = ("entrou", "saiu")
+LEITURA_DO_REGISTRO = "abriu o registro de acessos"
 
 
 def registro_para_o_promotor(db: Session, usuario: Usuario, limite: int = 100,
-                             antes: int | None = None) -> list[LinhaDoRegistro]:
+                             antes: int | None = None) -> tuple[list[LinhaDoRegistro], int | None]:
     """Cartão C20: o promotor lê o registro da sua promotoria, e só o dela. Nome e número saem de consultas
-    que também filtram pela promotoria: uma linha nunca mostra dado de fora."""
+    que também filtram pela promotoria: uma linha nunca mostra dado de fora. Devolve as linhas e, se houver
+    mais antigas, o id a partir do qual pedi-las."""
     if usuario.papel != "promotor":
         raise SoPromotor("só o promotor lê o registro de acessos")
-    linhas = acessos_da_promotoria(db, usuario.promotoria_id, limite, antes)
+    consulta = select(Acesso).where(Acesso.promotoria_id == usuario.promotoria_id, Acesso.acao.not_in(FORA_DA_TELA))
+    if antes is not None:
+        consulta = consulta.where(Acesso.id < antes)
+    achadas = list(db.scalars(consulta.order_by(Acesso.id.desc()).limit(limite + 1)))
+    brutas, mais = achadas[:limite], (achadas[limite - 1].id if len(achadas) > limite else None)
     nomes = dict(db.execute(select(Usuario.id, Usuario.nome)
-                            .where(Usuario.id.in_({x.usuario_id for x in linhas}))).all())
+                            .where(Usuario.id.in_({x.usuario_id for x in brutas}))).all())
     numeros = dict(db.execute(select(Processo.id, Processo.numero).where(
         Processo.promotoria_id == usuario.promotoria_id,
-        Processo.id.in_({x.processo_id for x in linhas if x.processo_id}))).all())
-    return [LinhaDoRegistro(x.id, x.quando, nomes.get(x.usuario_id, "Conta removida"), x.acao,
-                            numeros.get(x.processo_id, "Processo apagado") if x.processo_id else "")
-            for x in linhas]
+        Processo.id.in_({x.processo_id for x in brutas if x.processo_id}))).all())
+    linhas, anterior = [], None
+    for x in brutas:
+        chave = (x.usuario_id, x.acao, x.processo_id, x.quando.date())
+        if chave == anterior:
+            linhas[-1].vezes += 1   # a lista vem da mais nova para a mais antiga: fica o horário da última vez
+            continue
+        anterior = chave
+        linhas.append(LinhaDoRegistro(
+            x.quando, nomes.get(x.usuario_id, "Conta removida"), _FRASES.get(x.acao, x.acao),
+            numeros.get(x.processo_id, "Processo apagado") if x.processo_id else "", x.acao.startswith("negado")))
+    return linhas, mais
+
+
+def registrar_leitura_do_registro(db: Session, usuario: Usuario, agora: datetime) -> None:
+    """Toda leitura do registro fica anotada, em qualquer página. Leituras da mesma pessoa em dez minutos viram
+    uma linha só, para o registro não se encher de si mesmo."""
+    recente = db.scalar(select(func.count()).select_from(Acesso).where(
+        Acesso.usuario_id == usuario.id, Acesso.acao == LEITURA_DO_REGISTRO,
+        Acesso.quando > agora - timedelta(minutes=10)))
+    if not recente:
+        registrar_acesso(db, usuario, LEITURA_DO_REGISTRO)
 
 
 def apagar_acessos_vencidos(db: Session, agora: datetime) -> int:

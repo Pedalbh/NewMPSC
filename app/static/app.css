@@ -193,10 +193,11 @@ details[open] > summary { margin-bottom: var(--e3); color: var(--tinta); }
 .folha .b-centro { text-align: center; margin-top: 2em; }
 .folha .b-direita { text-align: right; }
 .registro { display: flex; flex-direction: column; }
-.registro li { display: flex; flex-wrap: wrap; gap: 2px var(--e3); padding: 10px 0; border-top: 1px solid var(--linha); }
+.registro li { display: grid; grid-template-columns: auto 1fr; gap: var(--e1) var(--e3); align-items: baseline; padding: var(--e2) 0; border-top: 1px solid var(--linha); }
 .registro li:first-child { border-top: 0; padding-top: 0; }
-.registro-quando { flex: none; min-width: 124px; font-variant-numeric: tabular-nums; }
+.registro-quando { font-variant-numeric: tabular-nums; }
 .registro-oque { min-width: 0; overflow-wrap: anywhere; }
+.registro .num { white-space: nowrap; }
 .dados { display: flex; flex-direction: column; }
 .dados > div { display: flex; justify-content: space-between; gap: var(--e3); padding: 8px 0; border-top: 1px solid var(--linha); }
 .dados > div:first-child { border-top: 0; padding-top: 0; }
@@ -209,9 +210,10 @@ ul.lista { list-style: disc; } ol.lista { list-style: decimal; }
 @media (max-width: 720px) {
   .so-largo { display: none; }
   .topo-dentro { gap: var(--e3); padding-inline: var(--e4); }
-  /* com quatro abas o menu não cabe ao lado da marca: desce para uma linha só dele, e rola de lado se precisar */
-  nav[aria-label="Principal"] { order: 3; flex: 1 0 100%; overflow-x: auto; }
-  .aba { padding: 0 12px; white-space: nowrap; }
+  /* com quatro abas o menu não cabe ao lado da marca: desce para uma linha só dele, reparte a largura e, se
+     ainda faltar, rola de lado (a casca traz a aba aberta para a vista). A folga é para o contorno de foco. */
+  nav[aria-label="Principal"] { order: 3; flex: 1 0 100%; overflow-x: auto; justify-content: space-between; padding: var(--e1); margin: calc(-1 * var(--e1)); }
+  .aba { flex: 1 0 auto; justify-content: center; min-height: 44px; padding: 0 var(--e2); white-space: nowrap; }
   main { padding: var(--e5) var(--e4) var(--e6); }
   h1 { font-size: 24px; line-height: 32px; }
   .folha { padding: 32px 20px; }

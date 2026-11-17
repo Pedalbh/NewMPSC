@@ -178,8 +178,11 @@ def main(argv=None) -> None:
         elif argv == ["limpar-autos"]:
             # cartão C1: rodar por agendador (cron ou timer) na hospedagem; o servidor também limpa sozinho
             print(f"Arquivos de autos apagados por prazo: {servicos.apagar_autos_vencidos(db, datetime.now())}")
-            print(f"Linhas do registro de acessos apagadas por prazo: "
-                  f"{servicos.apagar_acessos_vencidos(db, datetime.now())}")
+            try:
+                print(f"Linhas do registro de acessos apagadas por prazo: "
+                      f"{servicos.apagar_acessos_vencidos(db, datetime.now())}")
+            except Exception as e:   # noqa: BLE001 (os autos já foram limpos; o registro fica para a próxima rodada)
+                raise SystemExit(f"o registro de acessos não foi limpo ({type(e).__name__}); rode de novo") from None
         elif argv[:1] == ["apagar-processo"] and len(argv) == 3:
             # dado que entrou por engano (guia do ensaio): sai o processo com minuta, autos, rascunho e audiências
             usuario = db.scalar(select(Usuario).where(Usuario.email == argv[1].strip().lower()))

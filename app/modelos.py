@@ -218,15 +218,19 @@ def criar_banco(url: str, chave_impressao: bytes | None = None):
     if url.startswith("sqlite"):
         # o registro de acessos só acrescenta, também para quem escreve direto no banco. A única saída é a
         # limpeza por prazo (cartão C20): linha com mais de um ano pode ser apagada; alterada, nunca.
+        # O gatilho libera a linha um dia antes do prazo da aplicação: a limpeza, que apaga com 365 dias, nunca
+        # esbarra nele por fração de segundo. Cada comando grava sozinho (o SQLite não põe esquema em transação):
+        # por isso o gatilho novo tem outro nome e entra com IF NOT EXISTS antes de o antigo sair. Assim a
+        # tabela nunca fica sem barreira, e dois processos subindo juntos não se atropelam.
         with motor.begin() as conexao:
-            conexao.execute(text("DROP TRIGGER IF EXISTS acessos_sem_delete"))   # a versão 0.6.0 não tinha o prazo
             conexao.execute(text(
                 "CREATE TRIGGER IF NOT EXISTS acessos_sem_update BEFORE UPDATE ON acessos "
                 "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
             conexao.execute(text(
-                "CREATE TRIGGER acessos_sem_delete BEFORE DELETE ON acessos "
-                f"WHEN OLD.quando > datetime('now', 'localtime', '-{GUARDA_DOS_ACESSOS_DIAS} days') "   # noqa: S608
+                "CREATE TRIGGER IF NOT EXISTS acessos_so_sai_vencido BEFORE DELETE ON acessos "
+                f"WHEN OLD.quando > datetime('now', 'localtime', '-{GUARDA_DOS_ACESSOS_DIAS - 1} days') "   # noqa: S608
                 "BEGIN SELECT RAISE(ABORT, 'o registro de acessos só acrescenta'); END"))
+            conexao.execute(text("DROP TRIGGER IF EXISTS acessos_sem_delete"))   # o da 0.6.0, sem prazo
     return motor, sessionmaker(bind=motor, expire_on_commit=False)
 
 

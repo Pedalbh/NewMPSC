@@ -4,21 +4,23 @@
 {% block conteudo %}
 <section class="saudacao">
   <h1>Registro de acessos</h1>
-  <p class="fraco">Quem fez o quê na mesa de {{ usuario.espaco.nome }}. Só você, como promotor, vê esta tela. Cada linha fica por um ano.</p>
+  <p class="fraco">Quem fez o quê na mesa da promotoria. Só você vê esta tela. Cada linha é apagada depois de um ano.</p>
 </section>
-<section class="cartao" aria-label="Registro de acessos">
-  {% if linhas %}
-  <ul class="registro" id="registro">
+{% if folheando %}<a class="btn" href="/registro" id="registro-recentes">Ver as mais recentes</a>{% endif %}
+{% for dia, linhas in dias.items() %}
+<section class="cartao" aria-labelledby="dia-{{ loop.index }}">
+  <h2 class="dia" id="dia-{{ loop.index }}">{{ dia }}</h2>
+  <ul class="registro">
     {% for l in linhas %}
     <li>
-      <span class="registro-quando fraco pequeno">{{ l.quando | data }} {{ l.quando | hora }}</span>
-      <span class="registro-oque"><strong>{{ l.quem }}</strong> {{ l.acao }}{% if l.processo %} <span class="num">{{ l.processo }}</span>{% endif %}</span>
+      <time class="registro-quando fraco pequeno" datetime="{{ l.quando.isoformat(timespec='minutes') }}">{{ l.quando | hora }}</time>
+      <span class="registro-oque"><strong>{{ l.quem }}</strong> {{ l.frase }}{% if l.processo %} <span class="num">{{ l.processo }}</span>{% endif %}{% if l.vezes > 1 %} <span class="fraco">· {{ l.vezes }} vezes</span>{% endif %}{% if l.barrado %} <span class="selo atencao">Barrado</span>{% endif %}</span>
     </li>
     {% endfor %}
   </ul>
-  {% if mais %}<a class="btn largo" href="/registro?antes={{ mais }}" id="registro-mais">Ver as anteriores</a>{% endif %}
-  {% else %}
-  <p class="fraco">Nada registrado{{ ' antes disso' if request.query_params.get('antes') }}.</p>
-  {% endif %}
 </section>
+{% else %}
+<section class="cartao"><p class="fraco">Nada registrado{{ ' antes disso' if folheando }}.</p></section>
+{% endfor %}
+{% if mais %}<a class="btn largo" href="/registro?antes={{ mais }}" id="registro-mais">Ver as anteriores</a>{% endif %}
 {% endblock %}

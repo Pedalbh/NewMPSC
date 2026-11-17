@@ -19,18 +19,33 @@ O coordenador só volta a perguntar se, durante a execução, aparecer fato novo
 
 ### C22 · Com autos reais, onde o sistema roda?
 - **Por que é sua:** dado real e hospedagem. O limite 1 diz que dado real só entra depois de hospedagem e contrato institucionais.
-- **Contexto:** no C19 você respondeu que a IA fica como porta para depois e que os autos poderão ser reais. A aplicação já funciona sem IA (é o padrão) e com o SIG por planilha. Falta decidir onde ela roda quando o dado é real. Hoje o código recusa número de processo real em servidor de ensaio, e essa trava só sai por configuração de quem instala.
+- **Contexto:** no C19 você respondeu que a IA fica como porta para depois, que os autos poderão ser reais e que quer um sistema escalável que envelope o SIG. A aplicação já funciona sem IA (é o padrão) e com o SIG por planilha. Falta decidir onde ela roda quando o dado é real: processos criminais, inclusive sigilosos, com dados de vítimas e réus. Em qualquer opção, a IA continua travada pelo código enquanto houver dado real (C4), e os itens de segurança da Fase 2 (`docs/PILOTO.md`: segundo fator, Postgres, disco cifrado, revisão independente) continuam obrigatórios antes do primeiro dado real.
 - **Opções:**
-  - **A. Só em servidor da instituição.** Você leva à TI o pedido de servidor; até lá, o ensaio segue com dados fictícios, em sessões guiadas.
-    **Depois da decisão:** o coordenador escreve os requisitos de hospedagem para a TI e segue nos itens de segurança que faltam antes do primeiro dado real (lista em `docs/PILOTO.md`).
-  - **B. No computador de trabalho de cada promotoria, sem servidor.** O dado real não sai da máquina institucional. Promotor e assessor só compartilham a mesa se usarem a mesma máquina, e não há cópia de segurança central.
+  - **A. Só em servidor da instituição.** Você leva à TI o pedido de servidor. Nenhum dado real entra antes disso.
+    **Depois da decisão:** o coordenador escreve os requisitos de hospedagem para a TI e segue nos itens de segurança da Fase 2.
+  - **B. No computador de trabalho de cada promotoria, sem servidor.** O dado real não sai da máquina institucional. Promotor e assessor só compartilham a mesa se usarem a mesma máquina. Exige disco cifrado e conta própria no computador, e cópia de segurança local com prazo. A limpeza dos autos e o registro só funcionam com a máquina ligada. Instalar programa em máquina institucional depende da política da TI (a conferir).
     **Depois da decisão:** o coordenador prepara um instalador simples e o guia, com parecer de segurança, e traz em cartão o que muda no plano do piloto.
-  - **C. Em servidor contratado por você, já com dado real.** Mais rápido, mas põe dado de processo fora da instituição, sem contrato institucional nem parecer do encarregado. Exige mudar o limite 1.
+  - **C. Em servidor contratado por você, já com dado real.** Mais rápido, mas põe dado de processo criminal fora da instituição, em contrato no seu nome, sem contrato institucional nem parecer do encarregado. Se o provedor for estrangeiro, é transferência internacional de dado (LGPD, a conferir em fonte oficial). Exige mudar o limite 1.
     **Depois da decisão:** o coordenador muda o limite 1 no `CLAUDE.md` e traz em cartão os serviços, com preço, país e contrato.
   - **D. Outro.** Você escreve o que prefere.
     **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
 - **Recomendo:** A. É o único caminho que serve a várias promotorias sem tirar dado de processo da instituição. A opção B serve de ponte se a TI demorar.
 - **O que espera:** qualquer uso com autos reais. O desenvolvimento segue com dados fictícios.
+
+### C23 · Enquanto não há dado real, onde roda o ensaio da Fase 1?
+- **Por que é sua:** contrato e dinheiro (hospedagem) e destino de dado dos participantes. É a parte do C19 que a sua resposta não decidiu.
+- **Contexto:** o ensaio usa só processos fictícios e o motor de demonstração, sem IA (C19). Três promotorias precisam alcançar a aplicação, que hoje só roda no computador de quem desenvolve. Qualquer servidor guarda nome, e-mail e o registro do que cada participante fez.
+- **Opções:**
+  - **A. Sessões guiadas, sem servidor.** A aplicação roda no computador de quem conduz, por compartilhamento de tela. Nenhum dado de participante sai dali. O participante não usa sozinho.
+    **Depois da decisão:** o coordenador adapta o roteiro para sessão guiada e reescreve o portão da Fase 1.
+  - **B. Esperar o servidor da instituição.** O ensaio só começa quando a TI entregar o servidor (C22, opção A).
+    **Depois da decisão:** a Fase 1 fica parada; o coordenador segue nos itens da Fase 2.
+  - **C. Servidor pequeno contratado só para o ensaio.** Cada participante usa sozinho. O contrato fica em seu nome, e nome e e-mail dos participantes ficam fora da instituição por cerca de um mês.
+    **Depois da decisão:** o coordenador prepara a instalação com parecer de segurança e traz em cartão dois ou três serviços com preço e país.
+  - **D. Outro.** Você escreve o que prefere.
+    **Depois da decisão:** o coordenador executa o que você escrever; se mudar o efeito descrito aqui, volta em cartão novo.
+- **Recomendo:** A. Você escreveu que tudo será institucional no fim: a sessão guiada começa já, sem contrato e sem dado fora da instituição, e não atrapalha o pedido à TI.
+- **O que espera:** o começo da Fase 1 com os participantes.
 
 ## Decididos
 
@@ -61,6 +76,6 @@ Cada linha diz também como ficou a execução: o PR que a cumpriu, "nada a exec
 | C16 · Com integração oficial, o NewMPSC pode deixar a minuta no SIG como rascunho | A: sim, só rascunho, por ato do usuário, pela integração oficial | 16/11/2026 | limite 2 ajustado no `CLAUDE.md`; pedido em `docs/PEDIDO-TI.md`, para o titular levar à TI |
 | C17 · O piloto: quais promotorias, e quando o plano vai à Administração | A: plano aprovado com três promotorias | 16/11/2026 | roteiro, guia e termo em `docs/piloto/`; recusa de número real na planilha, na colagem e na pauta; servidor de ensaio virou o C19; itens da Fase 2 em construção, a começar pelo espaço da promotoria |
 | C18 · Promotor e assessor da mesma promotoria veem os mesmos processos | A: espaço da promotoria; só o promotor envia ao SIG | 16/11/2026 | feito na 0.6.0: espaço, papéis, registro de acessos, regra de saída e passagem do que era de cada conta; limite 3 ajustado no `CLAUDE.md`. Quem lê o registro e por quanto tempo fica virou o C20; se o assessor pede relatório à IA virou o C21 |
-| C19 · Onde roda o ensaio da Fase 1, e a IA liga nele | Outro: "a utilização de IA seja uma porta a ser utilizada no futuro (provavelmente via API). Os autos poderão ser reais, não apenas fictícios. O ideal é ter um sistema programado, escalável, que consiga fazer esse envelopamento do SIG" | 17/11/2026 | sem IA por ora: já é o padrão, e o motor fica atrás da porta de `app/portas.py`; onde o sistema roda com autos reais muda o efeito do cartão e virou o C22 |
+| C19 · Onde roda o ensaio da Fase 1, e a IA liga nele | Outro: "a utilização de IA seja uma porta a ser utilizada no futuro (provavelmente via API). Os autos poderão ser reais, não apenas fictícios. O ideal é ter um sistema programado, escalável, que consiga fazer esse envelopamento do SIG" | 17/11/2026 | sem IA por ora: já é o padrão, e o motor fica atrás da porta de `app/portas.py`. A resposta não diz onde o ensaio roda: virou o C23. Onde o sistema roda com autos reais muda o efeito do cartão: virou o C22. "Sistema escalável que envelope o SIG" fica como rumo do produto, já refletido no plano (Postgres, servidor único para várias promotorias, integração com o SIG) |
 | C20 · Registro de acessos: quem pode ler, e por quanto tempo fica | A, com observação: o promotor lê o da sua promotoria; guarda de 1 ano; sem acréscimo no termo ("tudo será institucional no final") | 17/11/2026 | feito na 0.7.0: tela "Registro" e limpeza por prazo |
 | C21 · O assessor pode pedir o relatório à IA | A, com observação: os dois pedem; limite da promotoria; "isso é para o futuro" | 17/11/2026 | feito na 0.7.0: o limite de pedidos passou a contar por promotoria |

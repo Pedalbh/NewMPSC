@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -72,9 +72,13 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
         try:
             with Sessao() as db:
                 servicos.apagar_autos_vencidos(db, agora())
-                servicos.apagar_acessos_vencidos(db, agora())
         except Exception:   # a limpeza não derruba a partida nem a requisição; tenta de novo na próxima hora
             logging.getLogger("newmpsc").exception("guarda dos autos: a limpeza falhou")
+        try:
+            with Sessao() as db:
+                servicos.apagar_acessos_vencidos(db, agora())
+        except Exception:
+            logging.getLogger("newmpsc").exception("registro de acessos: a limpeza por prazo falhou")
 
     _apagar_vencidos()
     guarda = {"ultima": agora()}   # cartão C1: a limpeza roda na partida e depois no máximo uma vez por hora
@@ -574,17 +578,22 @@ def criar_app(config: Config | None = None, agora=datetime.now, motor=None, em_s
 
     # ------------------------------------------------------------------ registro de acessos
     @app.get("/registro", response_class=HTMLResponse)
-    def registro(request: Request, antes: int | None = None, usuario=Depends(usuario_atual), db=Depends(banco)):
+    def registro(request: Request, antes: int | None = Query(None, ge=1, le=2**31 - 1),
+                 usuario=Depends(usuario_atual), db=Depends(banco)):
         """Cartão C20: o promotor lê quem fez o quê na mesa da sua promotoria. Só leitura."""
         try:
-            linhas = servicos.registro_para_o_promotor(db, usuario, 100, antes)
+            linhas, mais = servicos.registro_para_o_promotor(db, usuario, 100, antes)
         except servicos.SoPromotor as e:
             servicos.registrar_acesso(db, usuario, "negado: ler o registro")
             raise HTTPException(403, _frase(e)) from None
-        if antes is None:   # folhear as páginas seguintes não repete a linha
-            servicos.registrar_acesso(db, usuario, "abriu o registro de acessos")
-        return tela(request, "registro.html", usuario=usuario, pagina="registro", linhas=linhas,
-                    mais=linhas[-1].id if len(linhas) == 100 else None, dias=servicos.GUARDA_DOS_ACESSOS_DIAS)
+        servicos.registrar_leitura_do_registro(db, usuario, datetime.now())   # em qualquer página
+        hoje, dias = datetime.now().date(), {}
+        for linha in linhas:   # um cabeçalho por dia; em cada linha, só a hora
+            passados = (hoje - linha.quando.date()).days
+            rotulo = "Hoje" if passados == 0 else "Ontem" if passados == 1 else f"{linha.quando:%d/%m/%Y}"
+            dias.setdefault(rotulo, []).append(linha)
+        return tela(request, "registro.html", usuario=usuario, pagina="registro", dias=dias, mais=mais,
+                    folheando=antes is not None)
 
     # ------------------------------------------------------------------ audiências
     @app.get("/audiencias", response_class=HTMLResponse)
